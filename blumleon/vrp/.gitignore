@@ -1,0 +1,47 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Caches and logs
+*.log
+*.swp
+*.swo
+*.bak
+
+# Ansible inventory/test/playbook stuff
+hosts
+hosts.yml
+inventory
+*.retry
+*.orig
+*.tmp
+*.out
+test_*.yml
+test_*/         # falls du Testverzeichnisse hast
+
+# Ansible Collection temp/build folders
+ansible_collections/
+collections/
+build/
+dist/
+.eggs/
+parts/
+sdist/
+var/
+wheels/
+
+# OS-specific junk
+.DS_Store
+Thumbs.db
+
+# Editors/IDEs
+.vscode/
+.idea/
+*.sublime-workspace
+*.sublime-project
+
+# Python venv
+venv/
+.env/
+
