@@ -5,6 +5,27 @@
 from __future__ import absolute_import, division, print_function
 __metaclass__ = type
 
+DOCUMENTATION = r'''
+---
+name: vrp
+short_description: Cliconf-Plugin für Huawei VRP-Geräte
+version_added: "1.0.0"
+author: Leon Blum (@blumleon)
+description:
+  - Stellt eine CLI-Abstraktion für Switches und Router bereit,
+    die Huawei Versatile Routing Platform (VRP) bzw. CloudEngine
+    verwenden.
+  - Implementiert die Methoden C(get), C(get_config), C(edit_config)
+    und C(run_commands), sodass Module wie
+    M(blumleon.vrp.vrp_command) zuverlässig Befehle ausführen können.
+notes:
+  - Wird automatisch geladen, wenn
+    C(ansible_network_os=blumleon.vrp.vrp) und
+    C(ansible_connection=ansible.netcommon.network_cli) gesetzt sind.
+seealso:
+  - module: vrp_command
+'''
+
 import json
 import re
 from typing import List, Union
