@@ -7,137 +7,81 @@ __metaclass__ = type
 DOCUMENTATION = r'''
 ---
 module: vrp_command
+short_description: Führt CLI-Befehle auf Huawei-VRP-Geräten aus
 version_added: "1.0.0"
-author: Ihr Name (@IhrGitHubHandle)
-short_description: Führt CLI-Befehle auf Huawei VRP Geräten aus
+author: Leon Blum (@blumleon)
 description:
-  - Sendet beliebige Befehle an ein Huawei Versatile Routing Platform (VRP) Gerät über die CLI-Verbindung (SSH) und gibt die Ausgaben zurück.
-  - Unterstützt die Ausführung mehrerer Befehle sowie das Warten auf bestimmte Bedingungen in der Befehlsausgabe.
+  - Sendet beliebige Befehle an ein Gerät mit Huawei Versatile Routing Platform (VRP)
+    über eine CLI-Verbindung (SSH) und gibt die Ausgaben zurück.
+  - Unterstützt die Ausführung mehrerer Befehle sowie das Warten auf Bedingungen
+    in der Befehlsausgabe.
 options:
   commands:
     description:
-      - Liste von CLI-Befehlen, die auf dem VRP-Gerät ausgeführt werden sollen.
-      - Jeder Eintrag kann entweder ein einfaches String-Kommando oder ein Dictionary mit den Schlüsseln C(command), C(prompt) und C(answer) sein, um interaktive Bestätigungen zu handhaben.
-      - 'Beispiel für interaktives Kommando: C({"command": "reset saved-configuration", "prompt": "[Y/N]", "answer": "Y"}).'
+      - Liste der CLI-Befehle, die ausgeführt werden sollen.
+      - Jeder Eintrag kann ein einfacher String oder ein Dictionary sein,
+        das die Schlüssel C(command), C(prompt) und C(answer) enthält.
+      - "Beispiel: C({'command': 'reset saved-configuration', 'prompt': '[Y/N]', 'answer': 'Y'})"
     required: true
     type: list
     elements: raw
   wait_for:
     description:
-      - Liste von Bedingungen, die in den Kommando-Ausgaben geprüft werden sollen, bevor das Modul erfolgreich zurückkehrt.
-      - "Format jeder Bedingung: C(result[index] <operator> <text>), wobei C(index) der 0-basierte Index des Befehls ist."
-      - "Unterstützte Operatoren: C(contains) (Prüft, ob der Ausgabe-Text den <text> enthält) und C(not contains)."
-    required: false
+      - Bedingungen, die in den Ausgaben geprüft werden, bevor das Modul erfolgreich zurückkehrt.
+      - "Syntax z. B.: C(result[0] contains <Text>) oder C(result[1] not contains <Text>)."
     aliases: [waitfor]
     type: list
     elements: str
   match:
     description:
-      - Legt fest, ob alle oder mindestens eine der Bedingungen aus C(wait_for) erfüllt sein müssen.
-    required: false
+      - Gibt an, ob C(any) oder C(all) der C(wait_for)-Bedingungen erfüllt sein müssen.
     type: str
-    choices:
-      - any
-      - all
+    choices: [any, all]
     default: all
   retries:
     description:
-      - Anzahl der Versuche, die Befehle auszuführen und die C(wait_for)-Bedingungen zu prüfen, bevor das Modul aufgibt.
-    required: false
+      - Maximale Anzahl von Versuchen, die Bedingungen zu erfüllen.
     type: int
     default: 10
   interval:
     description:
-      - Wartezeit in Sekunden zwischen zwei Ausführungsversuchen (wenn C(wait_for) nicht erfüllt ist).
-    required: false
+      - Sekunden zwischen zwei Versuchen.
     type: int
     default: 1
 notes:
-  - Dieses Modul muss mit einer ansible.netcommon CLI-Verbindung genutzt werden (C(ansible_connection=ansible.netcommon.network_cli)) und erfordert C(ansible_network_os=blumleon.vrp.vrp) im Inventory.
-  - Paging auf dem Gerät wird automatisch durch das Terminal-Plugin deaktiviert, sodass Befehlsausgaben nicht blockiert werden.
+  - "Benötigt C(ansible_connection=ansible.netcommon.network_cli) und C(ansible_network_os=blumleon.vrp.vrp)."
+  - "Paging wird automatisch durch das Terminal-Plugin deaktiviert."
 seealso:
-  - vrp_config
-  - blumleon.vrp.vrp
+  - module: vrp_config
+  - cliconf: blumleon.vrp.vrp
 examples: |
-  # Beispiel: Anzeigen der Geräteversion und Schnittstellenübersicht
-  - hosts: huawei_routers
+  # Geräteversion anzeigen
+  - hosts: huawei_switch
     gather_facts: no
     connection: ansible.netcommon.network_cli
     vars:
       ansible_network_os: blumleon.vrp.vrp
     tasks:
-      - name: Geräteversion abfragen
+      - name: Version ausgeben
         blumleon.vrp.vrp_command:
           commands: display version
-      - name: Schnittstellenstatus abfragen
+
+  # Interfaces & Routing abrufen und Bedingungen prüfen
+  - hosts: huawei_switch
+    gather_facts: no
+    connection: ansible.netcommon.network_cli
+    vars:
+      ansible_network_os: blumleon.vrp.vrp
+    tasks:
+      - name: Interfaces & Routing
         blumleon.vrp.vrp_command:
           commands:
             - display interface brief
-            - display ip interface brief
-        register: intf_out
-      - name: Auswertung - prüfen, ob GigabitEthernet0/0/0 up ist
-        blumleon.vrp.vrp_command:
-          commands: display interface GigabitEthernet0/0/0
+            - display ip routing-table
           wait_for:
-            - "result[0] contains current state : UP"
-          retries: 5
-          interval: 2
-        register: iface_status
-      - debug:
-          msg: "Status Ausgabe: {{ intf_out.stdout[0] }}"
-'''
-
-EXAMPLES = r'''
-# Einfacher Befehl ausführen
-- name: Geräte-Name anzeigen
-  blumleon.vrp.vrp_command:
-    commands: display current-configuration | include sysname
-
-# Mehrere Befehle ausführen und Ergebnisse prüfen
-- name: Route und Schnittstellen prüfen
-  blumleon.vrp.vrp_command:
-    commands:
-      - display ip routing-table | include 0.0.0.0
-      - display interface brief
-    wait_for:
-      - "result[0] contains 0.0.0.0/0"
-      - "result[1] contains GE0/0/0"
-    match: all
-
-# Interaktives Kommando mit Bestätigung ausführen (Factory Reset Beispiel)
-- name: Konfiguration zurücksetzen (Bestätigung mit 'Y')
-  blumleon.vrp.vrp_command:
-    commands:
-      - command: reset saved-configuration
-        prompt: "[Y/N]"
-        answer: "Y"
-'''
-
-RETURN = r'''
-stdout:
-  description: Liste der vollständigen Kommandoausgaben (eine pro ausgeführtem Befehl), wie vom Gerät zurückgegeben.
-  type: list
-  elements: str
-  sample:
-    - "Huawei Versatile Routing Platform Software\nVRP (R) software, Version 8.180 (AR2200 V300R003C00SPC200)\n<Ausgabe gekürzt>\n"
-    - "Interface                         PHY   Protocol   Description\nEth0/0/0                           up    up         ---\n<Ausgabe gekürzt>\n"
-stdout_lines:
-  description: Ausgabe der Befehle, zerlegt in Listen von Zeilen (jede Liste entspricht einem Befehl aus stdout).
-  type: list
-  elements: list
-  sample:
-    - ["Huawei Versatile Routing Platform Software,", "VRP (R) software, Version 8.180 (AR2200 V300R003C00SPC200)", "..."]
-    - ["Interface                         PHY   Protocol   Description", "Eth0/0/0                           up    up         ---", "..."]
-failed_conditions:
-  description: Liste der C(wait_for)-Bedingungen, die am Ende nicht erfüllt wurden (nur gesetzt, wenn das Modul fehlschlägt).
-  type: list
-  elements: str
-  sample:
-    - "result[0] contains BGP"
-    - "result[1] contains 10.0.0.1"
-msg:
-  description: Beschreibende Fehlermeldung im Fehlerfall (z.B. wenn Wartebedingungen nicht erfüllt wurden).
-  type: str
+            - "result[0] contains MEth0/0/0"
+            - "result[1] contains 0.0.0.0/0"
+          match: all
 '''
 
 import time
