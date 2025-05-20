@@ -12,7 +12,7 @@ DOCUMENTATION = r'''
 ---
 module: vrp_config
 short_description: Verwalten der Gerätekonfiguration auf Huawei-VRP
-version_added: "1.0.0"
+version_added: "1.1.1"
 author: Leon Blum (@blumleon)
 description:
   - Fügt Konfigurationszeilen hinzu, entfernt sie oder ersetzt Blöcke
@@ -23,58 +23,41 @@ options:
     type: list
     elements: str
   parents:
-    description: Übergeordneter Konfig-Kontext (z. B. Interface-Block).
+    description: Übergeordneter Konfig-Kontext (z. B. C(interface GE1/0/1)).
     type: list
     elements: str
   state:
-    description: Ob Zeilen vorhanden sein sollen oder entfernt werden.
+    description: present / absent / replace.
     type: str
     choices: [present, absent, replace]
     default: present
   match:
-    description: Vergleichsstrategie mit der laufenden Konfiguration.
+    description: Aktuell nur C(line) unterstützt.
     type: str
-    choices: [line, strict, exact]
+    choices: [line]
     default: line
   save_when:
-    description: Wann die Konfiguration gespeichert wird.
+    description: Wann C(save) ausgeführt wird.
     type: str
     choices: [never, changed, always]
     default: changed
   backup:
-    description: Erstellt eine Sicherungs­kopie der laufenden Konfiguration.
+    description: Sichert die Running-Config lokal im C(backups/)-Ordner.
     type: bool
     default: false
 '''
 
-EXAMPLES = r'''
-# Beschreibung an Interface setzen
-- blumleon.vrp.vrp_config:
-    parents: interface GigabitEthernet0/0/0
-    lines: description Ansible_Test
-'''
-
-RETURN = r'''
-commands:
-  description: Liste der ausgeführten CLI-Kommandos.
-  type: list
-  elements: str
-'''
-
 # ---------------------------------------------------------------- helpers
 def load_running_config(conn):
-    """holt running-config als Zeilenliste"""
-    out = conn.run_commands('display current-configuration')[0]
-    return to_text(out, errors='surrogate_or_strict').splitlines()
-
+    raw = conn.run_commands('display current-configuration')[0]
+    return to_text(raw, errors='surrogate_or_strict').splitlines()
 
 def build_candidate(parents, lines):
-    """parents-Kontext + gewünschte Zeilen"""
+    """parent-Kontext + gewünschte Kinderzeilen"""
     return to_list(parents) + to_list(lines or [])
 
-
 def find_parent_block(running, parents):
-    """liefert Zeilen­bereich des parents-Blocks"""
+    """liefert (start,end) des parents-Blocks (ohne Zeile end)"""
     if not parents:
         return 0, len(running)
     try:
@@ -86,61 +69,71 @@ def find_parent_block(running, parents):
         end += 1
     return start, end
 
+def _undo_cmd(line):
+    """VRP braucht meist nur das erste Keyword – z. B. 'undo description'"""
+    return f"undo {line.split()[0]}"
 
 def diff_line_match(running, parents, candidate_children, state):
     """
-    vergleicht kinder-Zeilen (ohne führende Spaces) ⇒ erzeugt CLI-Kommandos
+    Vergleicht Kinderzeilen ⇒ erzeugt CLI-Kommandos
+    (Parents-Zeile selbst bleibt unangetastet!)
     """
-    cmds = []
+    cmds   = []
     start, end = find_parent_block(running, parents)
-    block_stripped = {l.lstrip() for l in (running[start:end] if start >= 0 else [])}
+    block_children = running[start + 1:end] if start >= 0 else []   # ohne parent
+    stripped = {l.lstrip() for l in block_children}
 
+    if state == 'replace':
+        desired = {l.lstrip() for l in candidate_children}
+        for l in stripped - desired:
+            cmds.append(_undo_cmd(l))
+        for l in desired - stripped:
+            cmds.append(l.lstrip())
+        return cmds
+
+    # state present / absent
     for raw in candidate_children:
         plain = raw.lstrip()
-        if state == 'present' and plain not in block_stripped:
+        if state == 'present' and plain not in stripped:
             cmds.append(plain)
-        elif state == 'absent' and plain in block_stripped:
-            cmds.append(f'undo {plain}')
+        elif state == 'absent' and plain in stripped:
+            cmds.append(_undo_cmd(plain))
     return cmds
-
-
 # ---------------------------------------------------------------- main
 def main():
     module = AnsibleModule(
         argument_spec=dict(
-            lines=dict(type='list', elements='str'),
-            parents=dict(type='list', elements='str'),
-            state=dict(type='str', choices=['present', 'absent', 'replace'], default='present'),
-            match=dict(type='str', choices=['line', 'strict', 'exact'], default='line'),
-            save_when=dict(type='str', choices=['never', 'changed', 'always'], default='changed'),
-            backup=dict(type='bool', default=False),
+            lines     = dict(type='list', elements='str'),
+            parents   = dict(type='list', elements='str'),
+            state     = dict(type='str', choices=['present','absent','replace'], default='present'),
+            match     = dict(type='str', choices=['line'], default='line'),
+            save_when = dict(type='str', choices=['never','changed','always'], default='changed'),
+            backup    = dict(type='bool', default=False),
         ),
         supports_check_mode=True,
     )
 
-    p     = module.params
-    conn  = Connection(module._socket_path)
-    run   = load_running_config(conn)
-    cand  = build_candidate(p['parents'], p['lines'])
+    p       = module.params
+    conn    = Connection(module._socket_path)
+    running = load_running_config(conn)
+    cand    = build_candidate(p['parents'], p['lines'])
+    parents = to_list(p['parents'])
 
-    if p['match'] != 'line' or p['state'] == 'replace':
-        module.fail_json(msg='Derzeit nur match=line & state present/absent implementiert')
-
-    parents   = to_list(p['parents'])
-    body_cmds = diff_line_match(run, parents, cand[len(parents):], p['state'])
+    body_cmds = diff_line_match(running, parents, cand[len(parents):], p['state'])
     changed   = bool(body_cmds)
 
-    if module.check_mode:
-        module.exit_json(changed=changed, commands=body_cmds)
+    # ---------- optional Backup
+    backup_path = module.backup_local('\n'.join(running)) if p['backup'] else None
 
-    cli_cmds, responses = [], []
+    if module.check_mode:
+        module.exit_json(changed=changed, commands=body_cmds, backup_path=backup_path)
+
+    cli_cmds = responses = []
     if changed:
         cli_cmds = ['system-view']
         if parents:
             cli_cmds.append(parents[0])
-        cli_cmds += body_cmds
-        cli_cmds += ['return', 'return']
-
+        cli_cmds += body_cmds + ['return', 'return']
         responses = conn.run_commands(cli_cmds)
 
         if p['save_when'] in ('always', 'changed'):
@@ -150,8 +143,11 @@ def main():
                 'answer' : 'Y'
             }])
 
-    module.exit_json(changed=changed, commands=cli_cmds, responses=responses)
-
+    module.exit_json(changed=changed,
+                     commands=cli_cmds,
+                     responses=responses,
+                     backup_path=backup_path)
 
 if __name__ == '__main__':
     main()
+
