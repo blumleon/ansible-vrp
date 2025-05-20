@@ -11,19 +11,20 @@ from ansible_collections.ansible.netcommon.plugins.module_utils.network.common.u
 DOCUMENTATION = r'''
 ---
 module: vrp_config
-short_description: Verwalten der Gerätekonfiguration auf Huawei-VRP
-version_added: "1.1.1"
+short_description: Idempotente Konfig-Änderungen auf Huawei-VRP
+version_added: "1.2.0"
 author: Leon Blum (@blumleon)
 description:
-  - Fügt Konfigurationszeilen hinzu, entfernt sie oder ersetzt Blöcke
-    in der laufenden Konfiguration eines Huawei-VRP-Geräts.
+  - Fügt Zeilen hinzu, entfernt sie oder ersetzt Blöcke in der Running-Config.
 options:
-  lines:
-    description: Konfigurationszeilen, die angewendet werden sollen.
-    type: list
-    elements: str
   parents:
-    description: Übergeordneter Konfig-Kontext (z. B. C(interface GE1/0/1)).
+    description:
+      - Ein oder mehrere Parent-Kontexte, z. B.
+        C("interface GE1/0/1") oder
+        C(["ospf 1", "area 0"]).
+    type: raw               # str ODER list
+  lines:
+    description: Kinder-Zeilen im Parent-Kontext.
     type: list
     elements: str
   state:
@@ -31,18 +32,17 @@ options:
     type: str
     choices: [present, absent, replace]
     default: present
-  match:
-    description: Aktuell nur C(line) unterstützt.
-    type: str
-    choices: [line]
-    default: line
+  keep_lines:
+    description: Zeilen, die bei C(state=replace) NIE gelöscht werden.
+    type: list
+    elements: str
   save_when:
     description: Wann C(save) ausgeführt wird.
     type: str
     choices: [never, changed, always]
     default: changed
   backup:
-    description: Sichert die Running-Config lokal im C(backups/)-Ordner.
+    description: Sichere Running-Config lokal (Verzeichnis C(backups/)).
     type: bool
     default: false
 '''
@@ -52,12 +52,14 @@ def load_running_config(conn):
     raw = conn.run_commands('display current-configuration')[0]
     return to_text(raw, errors='surrogate_or_strict').splitlines()
 
+def to_parents(obj):
+    """str -> [str] | list -> list"""
+    return [obj] if isinstance(obj, str) else to_list(obj)
+
 def build_candidate(parents, lines):
-    """parent-Kontext + gewünschte Kinderzeilen"""
-    return to_list(parents) + to_list(lines or [])
+    return to_parents(parents) + to_list(lines or [])
 
 def find_parent_block(running, parents):
-    """liefert (start,end) des parents-Blocks (ohne Zeile end)"""
     if not parents:
         return 0, len(running)
     try:
@@ -70,70 +72,75 @@ def find_parent_block(running, parents):
     return start, end
 
 def _undo_cmd(line):
-    """VRP braucht meist nur das erste Keyword – z. B. 'undo description'"""
     return f"undo {line.split()[0]}"
 
-def diff_line_match(running, parents, candidate_children, state):
-    """
-    Vergleicht Kinderzeilen ⇒ erzeugt CLI-Kommandos
-    (Parents-Zeile selbst bleibt unangetastet!)
-    """
+def diff_line_match(running, parents, cand_children, state, keep):
     cmds   = []
     start, end = find_parent_block(running, parents)
-    block_children = running[start + 1:end] if start >= 0 else []   # ohne parent
-    stripped = {l.lstrip() for l in block_children}
+    blk_children = running[start + 1:end] if start >= 0 else []
+    stripped = {l.lstrip() for l in blk_children}
 
     if state == 'replace':
-        desired = {l.lstrip() for l in candidate_children}
-        for l in stripped - desired:
+        desired = sorted({l.lstrip() for l in cand_children})
+        removals = stripped - set(desired) - set(keep)
+        for l in sorted(removals):
             cmds.append(_undo_cmd(l))
-        for l in desired - stripped:
-            cmds.append(l.lstrip())
+        for l in desired:
+            if l not in stripped:
+                cmds.append(l)
         return cmds
 
     # state present / absent
-    for raw in candidate_children:
+    for raw in cand_children:
         plain = raw.lstrip()
         if state == 'present' and plain not in stripped:
             cmds.append(plain)
         elif state == 'absent' and plain in stripped:
             cmds.append(_undo_cmd(plain))
     return cmds
+
 # ---------------------------------------------------------------- main
 def main():
     module = AnsibleModule(
         argument_spec=dict(
             lines     = dict(type='list', elements='str'),
-            parents   = dict(type='list', elements='str'),
+            parents   = dict(type='raw'),
             state     = dict(type='str', choices=['present','absent','replace'], default='present'),
-            match     = dict(type='str', choices=['line'], default='line'),
+            keep_lines= dict(type='list', elements='str', default=[]),
             save_when = dict(type='str', choices=['never','changed','always'], default='changed'),
             backup    = dict(type='bool', default=False),
         ),
         supports_check_mode=True,
     )
 
-    p       = module.params
-    conn    = Connection(module._socket_path)
-    running = load_running_config(conn)
-    cand    = build_candidate(p['parents'], p['lines'])
-    parents = to_list(p['parents'])
+    p        = module.params
+    conn     = Connection(module._socket_path)
+    running  = load_running_config(conn)
+    parents  = to_parents(p['parents'])
+    cand     = build_candidate(parents, p['lines'])
 
-    body_cmds = diff_line_match(running, parents, cand[len(parents):], p['state'])
+    body_cmds = diff_line_match(running,
+                                parents,
+                                cand[len(parents):],
+                                p['state'],
+                                p['keep_lines'])
     changed   = bool(body_cmds)
 
     # ---------- optional Backup
     backup_path = module.backup_local('\n'.join(running)) if p['backup'] else None
 
+    # ---------- Check-Mode mit Diff-Ausgabe
     if module.check_mode:
-        module.exit_json(changed=changed, commands=body_cmds, backup_path=backup_path)
+        module.exit_json(changed=changed,
+                         commands=body_cmds,
+                         backup_path=backup_path,
+                         diff={'prepared': '\n'.join(body_cmds)})
 
-    cli_cmds = responses = []
+    # ---------- Apply
+    cli_cmds, responses = [], []
     if changed:
-        cli_cmds = ['system-view']
-        if parents:
-            cli_cmds.append(parents[0])
-        cli_cmds += body_cmds + ['return', 'return']
+        # system-view → alle Parents → Body → Return-Cascade
+        cli_cmds = ['system-view'] + parents + body_cmds + ['return'] * (len(parents)+1)
         responses = conn.run_commands(cli_cmds)
 
         if p['save_when'] in ('always', 'changed'):
