@@ -21,9 +21,6 @@ test_*.yml
 test_*/         # falls du Testverzeichnisse hast
 
 # Ansible Collection temp/build folders
-ansible_collections/
-collections/
-build/
 dist/
 .eggs/
 parts/
