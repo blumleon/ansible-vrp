@@ -80,7 +80,7 @@ def main():
                                    p['keep_lines'])
     changed = bool(body_cmds)
 
-    # 🔧 Backup-Handling mit optionalem Pfad
+    # Backup-Handling mit optionalem Pfad
     backup_path = None
     if p['backup']:
         cfg_text = '\n'.join(running)
@@ -122,4 +122,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
