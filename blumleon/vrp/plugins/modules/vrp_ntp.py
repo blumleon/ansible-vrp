@@ -14,7 +14,7 @@ DOCUMENTATION = r'''
 ---
 module: vrp_ntp
 short_description: Minimal-NTP-Konfiguration auf Huawei-VRP
-version_added: "1.3.0"
+version_added: "1.3.1"
 author: Leon Blum (@blumleon)
 description:
   - Setzt Time-Zone, ein einmaliges Sommerzeit-Fenster und einen (unicast)-NTP-Server.
@@ -50,6 +50,10 @@ options:
     description: End-Zeitpunkt im Format C("HH:MM YYYY-MM-DD").
     type: str
     default: "03:00 2025-10-26"
+  dst_offset:
+    description: Dauer der Sommerzeitverschiebung (z. B. "01:00").
+    type: str
+    default: "01:00"
   disable_ipv4_server:
     description: Deaktiviert den integrierten IPv4-NTP-Server.
     type: bool
@@ -87,6 +91,7 @@ EXAMPLES = r'''
     timezone_offset: 1
     dst_start: "02:00 2026-03-29"
     dst_end:   "03:00 2026-10-25"
+    dst_offset: "01:00"
 '''
 
 RETURN = r'''
@@ -110,7 +115,7 @@ def build_lines(p):
     lines = [
         f"clock timezone {p['timezone_name']} add {p['timezone_offset']}",
         (f"clock daylight-saving-time {p['dst_name']} one-year "
-         f"{p['dst_start']} {p['dst_end']}"),
+         f"{p['dst_start']} {p['dst_end']} {p['dst_offset']}"),
         f"ntp unicast-server {p['server']}",
     ]
 
@@ -137,6 +142,7 @@ def main():
             dst_name             = dict(type='str', default='Sommerzeit'),
             dst_start            = dict(type='str', default='02:00 2025-03-30'),
             dst_end              = dict(type='str', default='03:00 2025-10-26'),
+            dst_offset           = dict(type='str', default='01:00'),
             disable_ipv4_server  = dict(type='bool', default=True),
             disable_ipv6_server  = dict(type='bool', default=True),
             state                = dict(type='str',
@@ -158,11 +164,11 @@ def main():
     # Build CLI lines
     cand_lines = build_lines(p)
     body_cmds  = vc.diff_line_match(running, [], cand_lines,
-                                    'present', keep_lines=[])  # Elternkontext = Root
+                                    'present', keep=[])  # Keine Zeile schützen
 
     changed_config = bool(body_cmds)
 
-    # Backup-Handling (identisch zu vrp_config)
+    # Backup-Handling
     backup_changed = False
     backup_path    = None
     if p['backup']:
@@ -214,3 +220,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
