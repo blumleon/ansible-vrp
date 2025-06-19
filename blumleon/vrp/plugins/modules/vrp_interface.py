@@ -1,9 +1,142 @@
-#!/usr/bin/python
-# -*- coding: utf-8 -*-
-from __future__ import absolute_import, division, print_function
-__metaclass__ = type
+# Copyright (C) 2025 Leon Blum
+# This file is part of the blumleon.vrp Ansible Collection
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+
+DOCUMENTATION = r"""
+---
+module: vrp_interface
+short_description: Konfiguriert Huawei-VRP-Interfaces (L1 & L2) idempotent
+version_added: "1.0.0"
+author:
+  - Leon Blum (@blumleon)
+description:
+  - Dieses Modul ermöglicht die konsistente Konfiguration von Interface-Parametern auf Huawei-VRP-Geräten.
+  - Unterstützt Layer-1 (Beschreibung, Admin-Status, MTU, Speed) sowie Layer-2 (Access/Trunk/Hybrid-Modi).
+  - Erkennt bestehende Konfiguration automatisch und führt nur nötige Änderungen durch.
+  - Unterstützt Checkmode und speichert Konfiguration optional persistent.
+options:
+  name:
+    description:
+      - Interface-Name, z. B. C(MultiGE1/0/20)
+    required: true
+    type: str
+  admin_state:
+    description:
+      - Administrative Schnittstellenstatus
+    type: str
+    choices: [up, down]
+  description:
+    description:
+      - Interface-Beschreibung (leer = entfernen)
+    type: str
+  speed:
+    description:
+      - Fixe Geschwindigkeit, z. B. C(1000), abhängig vom Modell
+    type: str
+  mtu:
+    description:
+      - Maximale Paketgröße in Byte, z. B. C(1500)
+    type: int
+  port_mode:
+    description:
+      - Layer-2-Portmodus
+    type: str
+    choices: [access, trunk, hybrid]
+  vlan:
+    description:
+      - VLAN-ID für Access-Ports
+    type: int
+  trunk_vlans:
+    description:
+      - VLAN-Liste für Trunk- oder Hybrid-Ports, z. B. C(10,20-30)
+    type: str
+  native_vlan:
+    description:
+      - Native VLAN für Trunk-Ports (setzt PVID)
+    type: int
+  state:
+    description:
+      - Setzt das Interface auf C(present) (konfigurieren) oder C(absent) (zurücksetzen)
+    default: present
+    type: str
+    choices: [present, absent]
+  save_when:
+    description:
+      - Wann die Konfiguration gespeichert werden soll
+    type: str
+    default: changed
+    choices: [never, changed, always]
+notes:
+  - Für Switchports empfohlen – nicht geeignet für Loopbacks oder Mgmt-Interfaces.
+  - C(trunk_vlans) wird als Liste wie C("10,20-25") übergeben und automatisch formatiert.
+  - C(vlan) darf nur bei Access-Ports gesetzt werden, C(native_vlan) nur bei Trunk-Ports.
+  - Das Modul erkennt automatisch, ob z. B. C(undo shutdown) implizit aktiv ist.
 """
-vrp_interface – idempotente Interface-Konfiguration (L1 & L2) auf Huawei-VRP.
+
+EXAMPLES = r"""
+- name: Einfacher Access-Port (VLAN 20)
+  blumleon.vrp.vrp_interface:
+    name: MultiGE1/0/14
+    port_mode: access
+    vlan: 20
+    description: "Client-Port"
+    admin_state: up
+    save_when: changed
+
+- name: Trunk-Port mit VLAN-Liste (native VLAN 55)
+  blumleon.vrp.vrp_interface:
+    name: MultiGE1/0/30
+    port_mode: trunk
+    trunk_vlans: "10-20,55,60"
+    native_vlan: 55
+    description: "Uplink to Core"
+    admin_state: up
+    save_when: always
+
+- name: Hybrid-Port mit VLAN-Tagging
+  blumleon.vrp.vrp_interface:
+    name: MultiGE1/0/31
+    port_mode: hybrid
+    trunk_vlans: "100,200"
+    native_vlan: 1
+    description: "IoT Segment"
+    admin_state: up
+
+- name: Interface auf Werkzustand zurücksetzen
+  blumleon.vrp.vrp_interface:
+    name: MultiGE1/0/31
+    state: absent
+"""
+
+RETURN = r"""
+commands:
+  description: Liste der gesendeten CLI-Befehle
+  returned: always
+  type: list
+  elements: raw
+  sample:
+    - system-view
+    - interface MultiGE1/0/14
+    - description Test-Port
+    - port link-type access
+    - port default vlan 3999
+    - undo shutdown
+    - return
+    - return
+    - command: save
+      prompt: '[Y/N]'
+      answer: 'Y'
+
+responses:
+  description: CLI-Antworten vom Gerät (sofern Befehle gesendet wurden)
+  returned: when changed
+  type: list
+  elements: str
 """
 
 from ansible.module_utils.basic import AnsibleModule
@@ -12,13 +145,15 @@ from ansible_collections.blumleon.vrp.plugins.module_utils import vrp_common as 
 
 
 # --------------------------------------------------------------------------- #
-#  Parameter-Validierung                                                     #
+#  Parameter-validation                                                       #
 # --------------------------------------------------------------------------- #
 def _validate_params(module, p):
     mode = p.get("port_mode")
     if mode == "access":
         if p.get("trunk_vlans") or p.get("native_vlan"):
-            module.fail_json(msg="trunk_vlans / native_vlan sind bei access nicht erlaubt")
+            module.fail_json(
+                msg="trunk_vlans / native_vlan sind bei access nicht erlaubt"
+            )
     if mode in ("trunk", "hybrid") and p.get("vlan") is not None:
         module.fail_json(msg="Parameter 'vlan' ist nur bei port_mode=access zulässig")
 
@@ -41,18 +176,19 @@ def main() -> None:
         native_vlan=dict(type="int"),
         # ---------- Meta
         state=dict(type="str", choices=["present", "absent"], default="present"),
-        save_when=dict(type="str", choices=["never", "changed", "always"], default="changed"),
+        save_when=dict(
+            type="str", choices=["never", "changed", "always"], default="changed"
+        ),
     )
     module = AnsibleModule(argument_spec=spec, supports_check_mode=True)
     p = module.params
     _validate_params(module, p)
 
-    conn     = Connection(module._socket_path)
-    parents  = f"interface {p['name']}"
+    conn = Connection(module._socket_path)
+    parents = f"interface {p['name']}"
 
-    # ----------- gewünschter Body ------------------------------------------
+    # -----------  Body ------------------------------------------
     if p["state"] == "absent":
-        # Vollständiger Reset
         body = [
             "undo description",
             "shutdown",
@@ -61,19 +197,19 @@ def main() -> None:
             "undo port link-type",
             "undo port default vlan",
         ]
-        replace = False            # nur „present“ prüfen, keine Ersetzung
+        replace = False
     else:
-        body    = vc.build_interface_lines(p)
+        body = vc.build_interface_lines(p)
         replace = True
 
-    # ----------- zentrales diff + save --------------------------------------
+    # ----------- central diff + save --------------------------------------
     changed, cli_cmds = vc.diff_and_wrap(
         conn,
-        parents      = [parents],
-        cand_children= body,
-        save_when    = p["save_when"],
-        replace      = replace,
-        keep         = [],
+        parents=[parents],
+        cand_children=body,
+        save_when=p["save_when"],
+        replace=replace,
+        keep=[],
     )
 
     if module.check_mode:

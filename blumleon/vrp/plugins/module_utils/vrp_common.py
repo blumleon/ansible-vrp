@@ -1,19 +1,11 @@
-# -*- coding: utf-8 -*-
-"""
-Zentrale Helfer für Huawei‑VRP‑Collection.
-
-Changelog (2025‑06‑11)
-----------------------
-* _undo_cmd:
-    • "port trunk pvid vlan …" erzeugt **kein** Undo mehr, weil VRP das Attribut
-      beim Mode‑Wechsel automatisch entfernt.
-* diff_line_match:
-    • Unreachable Doppel‑Loop entfernt.
-    • Stellt sicher, dass "undo port link-type" **immer zuletzt** gesendet wird,
-      damit Trunk‑Attribute vorher sauber entfernt werden.
-"""
-
-from __future__ import annotations
+# Copyright (C) 2025 Leon Blum
+# This file is part of the blumleon.vrp Ansible Collection
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
 
 import os
 import re
@@ -36,13 +28,11 @@ def backup_config(
     user_path: str | None = None,
     prefix: str = "vrp_",
 ) -> Tuple[bool, str | None]:
-    """Sichert die Running‑Config lokal ab."""
     if not do_backup:
         return False, None
 
     cfg_text = "\n".join(load_running_config(conn))
 
-    # Benutzerpfad
     if user_path:
         os.makedirs(os.path.dirname(user_path), exist_ok=True)
         identical = os.path.isfile(user_path) and open(user_path).read() == cfg_text
@@ -51,7 +41,6 @@ def backup_config(
                 fh.write(cfg_text)
         return (not identical), user_path
 
-    # Auto‑Pfad
     os.makedirs("backups", exist_ok=True)
     fd, path = tempfile.mkstemp(prefix=prefix, suffix=".cfg", dir="backups")
     with os.fdopen(fd, "w", encoding="utf-8") as fh:
@@ -103,18 +92,12 @@ def find_parent_block(running, parents):
 
 
 # ---------------------------------------------------------------------------
-#  Undo‑Generator                                                            #
+#  Undo                                                                      #
 # ---------------------------------------------------------------------------
 
-def _undo_cmd(line: str) -> str:
-    """Generiert Undo‑Befehle für VRP‑CLI.
 
-    • port link-type <mode>   -> undo port link-type
-    • port default vlan <id>  -> undo port default vlan
-    • trunk‑Attribute, die beim Mode‑Wechsel von selbst verschwinden
-      (allow-pass, pvid)      -> ''  (kein Undo)
-    • sonst                   -> undo <erstes Keyword>
-    """
+def _undo_cmd(line: str) -> str:
+
     tokens = line.split()
     if not tokens:
         return ""
@@ -128,19 +111,19 @@ def _undo_cmd(line: str) -> str:
     if tokens[1:3] == ["default", "vlan"]:
         return "undo port default vlan"
 
-    # —— nichts zurückgeben: VRP räumt das automatisch weg ——
+    # -- return nothing: VRP automatically clears it away --
     if tokens[1:3] == ["trunk", "allow-pass"]:
         return ""
     if tokens[1:4] == ["trunk", "pvid", "vlan"]:
-        return ""  # pvid wird beim Mode‑Wechsel implizit entfernt
+        return ""
 
-    # Fallback (letztes Token kappen)
     return f"undo {' '.join(tokens[:-1])}"
 
 
 # ---------------------------------------------------------------------------
-#  Diff‑Logik                                                                #
+#  Diff logic                                                                #
 # ---------------------------------------------------------------------------
+
 
 def diff_line_match(running, parents, cand_children, state, keep):
     """Vergleicht laufende Konfiguration mit Wunsch-Config und erzeugt CLI."""
@@ -160,22 +143,32 @@ def diff_line_match(running, parents, cand_children, state, keep):
                 cmds.append(undo)
 
         # ---------- Additions ------------------------------------------------
-        #   Wichtig: NICHT sortieren – Originalreihenfolge beibehalten,
-        #   damit semantische Abhängigkeiten (link‑type → default‑vlan …)
-        #   gewahrt bleiben.
+        # Important: DO NOT sort - keep the original order
         for raw in cand_children:
             plain = raw.lstrip()
-            if plain not in stripped:
+
+            # Special case: port link-type access → only set if NOT already access
+            if plain == "port link-type access":
+                if any(
+                    line.startswith("port link-type ") and line != plain
+                    for line in stripped
+                ):
+                    cmds.append(plain)
+                else:
+                    continue
+
+            # Special case: undo shutdown → only send if shutdown is actually configured
+            elif plain == "undo shutdown":
+                if "shutdown" in stripped:
+                    cmds.append(plain)
+                else:
+                    continue
+
+            elif plain not in stripped:
                 cmds.append(plain)
 
-        # ---------- Reihenfolge fixen ---------------------------------------
-        #   • "undo port link-type" muss VOR "port link-type …" stehen
-        #   • Gleichzeitig soll der Undo aber NACH allen anderen Undos kommen,
-        #     damit spezielle Trunk-Attribute vorher weg sind.
         if "undo port link-type" in cmds:
             idx = cmds.index("undo port link-type")
-            # nach vorne ziehen, aber hinter mögliche andere Undos
-            # (die alle mit "undo" anfangen):
             last_undo = max(i for i, c in enumerate(cmds) if c.startswith("undo"))
             if last_undo < idx:
                 cmds.insert(last_undo + 1, cmds.pop(idx))
@@ -192,19 +185,6 @@ def diff_line_match(running, parents, cand_children, state, keep):
                 cmds.append(undo)
     return cmds
 
-    # state == present / absent
-    for raw in cand_children:
-        plain = raw.lstrip()
-        if state == "present" and plain not in stripped:
-            cmds.append(plain)
-        elif state == "absent" and plain in stripped:
-            undo = _undo_cmd(plain)
-            if undo:
-                cmds.append(undo)
-    return cmds
-
-
-# ---------- NEU ------------------------------------------------------------
 
 def diff_and_wrap(conn, parents, cand_children, save_when, replace=True, keep=None):
     """Wrapper um diff_line_match + system-view‑Kaskade + optional save."""
@@ -224,6 +204,7 @@ def diff_and_wrap(conn, parents, cand_children, save_when, replace=True, keep=No
 # ---------------------------------------------------------------------------
 #  interface helpers                                                         #
 # ---------------------------------------------------------------------------
+
 
 def _l1_lines(p):
     ls = []
@@ -267,15 +248,30 @@ def _l2_lines(p):
         ls.append(f"port default vlan {p['vlan']}")
 
     raw_list = p.get("trunk_vlans")
-    if mode in ("trunk", "hybrid") and raw_list:
+
+    if mode == "trunk" and raw_list:
         ls.append("port trunk allow-pass vlan all")
-        ls.append(f"port {mode} allow-pass vlan {_normalize_vlan_list(raw_list)}")
+        ls.append(f"port trunk allow-pass vlan {_normalize_vlan_list(raw_list)}")
+
+    if mode == "hybrid" and raw_list:
+        ls.append(f"port hybrid tagged vlan {_normalize_vlan_list(raw_list)}")
 
     if mode == "trunk" and p.get("native_vlan") is not None:
         ls.append(f"port trunk pvid vlan {p['native_vlan']}")
+
     return ls
 
 
 def build_interface_lines(p):
     return _l1_lines(p) + _l2_lines(p)
 
+
+# ---------------------------------------------------------------------------
+#  nameserver helper                                                        #
+# ---------------------------------------------------------------------------
+
+
+def lines_present(running: list[str], desired: list[str]) -> bool:
+    """Checks if all desired lines already exist in running config."""
+    flat = {line.strip() for line in running}
+    return all(line.strip() in flat for line in desired)

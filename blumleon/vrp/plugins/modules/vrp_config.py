@@ -1,31 +1,136 @@
-#!/usr/bin/python
-# -*- coding: utf-8 -*-
-from __future__ import absolute_import, division, print_function
-
-__metaclass__ = type
-
-from ansible.module_utils.basic import AnsibleModule
-from ansible.module_utils.connection import Connection
-from ansible_collections.blumleon.vrp.plugins.module_utils import vrp_common as vc
+# Copyright (C) 2025 Leon Blum
+# This file is part of the blumleon.vrp Ansible Collection
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
 
 DOCUMENTATION = r"""
 ---
 module: vrp_config
-short_description: Idempotente Konfig-Änderungen auf Huawei-VRP
-version_added: "1.2.0"
+short_description: Manage configuration lines on Huawei VRP devices
+version_added: "1.0.0"
 author: Leon Blum (@blumleon)
 description:
-  - Fügt Zeilen hinzu, entfernt sie oder ersetzt Blöcke in der Running-Config.
-  - Erstellt optional ein Backup der laufenden Konfiguration.
+  - Applies configuration changes to Huawei VRP devices in an idempotent way.
+  - Supports adding, removing, or replacing lines inside a given configuration block.
+  - Optionally creates a local backup of the current configuration.
 options:
-  parents:      {type: raw}
-  lines:        {type: list, elements: str}
-  state:        {type: str, choices: [present, absent, replace], default: present}
-  keep_lines:   {type: list, elements: str}
-  save_when:    {type: str, choices: [never, changed, always], default: changed}
-  backup:       {type: bool, default: false}
-  backup_path:  {type: str}
+  parents:
+    description:
+      - 'Parent lines that define the context (e.g., C(interface GigabitEthernet0/0/1)).'
+      - Can be a string or list of strings.
+    type: raw
+    required: false
+
+  lines:
+    description:
+      - List of configuration lines to add or remove.
+      - Lines should not include parent context lines.
+      - 'Note: To remove lines, they must be specified explicitly. state: absent with lines=[] has no effect.'
+    type: list
+    elements: str
+    required: false
+
+  state:
+    description:
+      - Whether the configuration lines should be present, absent, or used to fully replace the block.
+    type: str
+    choices: [present, absent, replace]
+    default: present
+
+  keep_lines:
+    description:
+      - When using C(state=replace), these lines will be preserved even if not present in C(lines).
+    type: list
+    elements: str
+    required: false
+    default: []
+
+  save_when:
+    description:
+      - When to save the device configuration.
+    type: str
+    choices: [never, changed, always]
+    default: changed
+
+  backup:
+    description:
+      - Whether to create a local backup of the running configuration.
+    type: bool
+    default: false
+
+  backup_path:
+    description:
+      - Optional path to write the backup file to.
+    type: str
+    required: false
+
+notes:
+  - Requires C(ansible_connection=ansible.netcommon.network_cli).
+  - Automatically enters and exits system-view mode if configuration changes are needed.
+  - When C(state=replace) is used, existing lines in the context block are removed unless preserved via C(keep_lines).
+
+seealso:
+  - module: vrp_interface
+  - module: vrp_command
 """
+
+EXAMPLES = r"""
+- name: Set interface description
+  blumleon.vrp.vrp_config:
+    parents: interface GigabitEthernet1/0/1
+    lines:
+      - description Uplink to Core
+    state: present
+    save_when: changed
+
+- name: Remove a specific line from AAA section
+  blumleon.vrp.vrp_config:
+    parents: aaa
+    lines:
+      - local-user test_user privilege level 15
+    state: absent
+
+- name: Replace entire block but keep specific line
+  blumleon.vrp.vrp_config:
+    parents: interface GigabitEthernet1/0/1
+    lines:
+      - shutdown
+    state: replace
+    keep_lines:
+      - description KEEP_ME
+"""
+
+RETURN = r"""
+changed:
+  description: Whether the configuration was changed or a backup was created.
+  type: bool
+  returned: always
+
+commands:
+  description: List of CLI commands that were sent to the device.
+  type: list
+  elements: str
+  returned: when changed
+
+responses:
+  description: Raw responses from the device for each command.
+  type: list
+  elements: str
+  returned: when changed
+
+backup_path:
+  description: Path to the written backup file, if created.
+  type: str
+  returned: when backup was used
+"""
+
+from ansible.module_utils.basic import AnsibleModule
+from ansible.module_utils.connection import Connection
+from ansible_collections.blumleon.vrp.plugins.module_utils import vrp_common as vc
 
 
 def main() -> None:
@@ -57,7 +162,6 @@ def main() -> None:
     )
     changed_config = bool(body_cmds)
 
-    # ------------------------------ Backup (neuer Helper)
     backup_changed, backup_path = vc.backup_config(
         conn,
         do_backup=p["backup"],
@@ -75,7 +179,7 @@ def main() -> None:
         cli_cmds = (
             ["system-view"] + parents + body_cmds + ["return"] * (len(parents) + 1)
         )
-        vc.append_save(cli_cmds, p["save_when"])  # ← save anfügen
+        vc.append_save(cli_cmds, p["save_when"])
         responses = conn.run_commands(cli_cmds)
 
     module.exit_json(

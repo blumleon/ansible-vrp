@@ -1,38 +1,171 @@
-#!/usr/bin/python
-# -*- coding: utf-8 -*-
-from __future__ import absolute_import, division, print_function
-
-__metaclass__ = type
-
-from ansible.module_utils.basic import AnsibleModule
-from ansible.module_utils.connection import Connection
-from ansible_collections.blumleon.vrp.plugins.module_utils import vrp_common as vc
+# Copyright (C) 2025 Leon Blum
+# This file is part of the blumleon.vrp Ansible Collection
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
 
 DOCUMENTATION = r"""
 ---
 module: vrp_ntp
-short_description: Minimal-NTP-Konfiguration auf Huawei-VRP
-version_added: "1.3.1"
+short_description: Configure NTP server, timezone, and daylight saving time on Huawei VRP
+version_added: "1.0.0"
 author: Leon Blum (@blumleon)
 description:
-  - Konfiguriert Zeitzone, Sommerzeit und einen externen NTP-Server.
-  - Erstellt optional ein Backup der Running-Config.
+  - Configures an NTP unicast server, timezone settings, and daylight saving time on Huawei VRP devices.
+  - Optionally disables the built-in NTP server and stores the configuration locally.
+  - The configuration is applied globally (not per interface).
 options:
-  server:               {type: str, required: true}
-  source_interface:     {type: str}
-  timezone_name:        {type: str, default: CET}
-  timezone_offset:      {type: int, default: 1}
-  dst_name:             {type: str, default: Sommerzeit}
-  dst_start:            {type: str, default: "02:00 2025-03-30"}
-  dst_end:              {type: str, default: "03:00 2025-10-26"}
-  dst_offset:           {type: str, default: "01:00"}
-  disable_ipv4_server:  {type: bool, default: true}
-  disable_ipv6_server:  {type: bool, default: true}
-  state:                {type: str, choices: [present, absent], default: present}
-  save_when:            {type: str, choices: [never, changed, always], default: changed}
-  backup:               {type: bool, default: false}
-  backup_path:          {type: str}
+  server:
+    description:
+      - IP address or hostname of the NTP server.
+    type: str
+    required: true
+
+  source_interface:
+    description:
+      - Optional source interface for outbound NTP packets.
+    type: str
+    required: false
+
+  timezone_name:
+    description:
+      - Name of the timezone.
+    type: str
+    default: CET
+
+  timezone_offset:
+    description:
+      - Offset in hours from UTC (e.g., C(1) for UTC+1).
+    type: int
+    default: 1
+
+  dst_name:
+    description:
+      - Name used for daylight saving time.
+    type: str
+    default: Sommerzeit
+
+  dst_start:
+    description:
+      - Start time of DST in the format C(HH:MM YYYY-MM-DD).
+    type: str
+    default: "02:00 2025-03-30"
+
+  dst_end:
+    description:
+      - End time of DST in the format C(HH:MM YYYY-MM-DD).
+    type: str
+    default: "03:00 2025-10-26"
+
+  dst_offset:
+    description:
+      - Time offset applied during DST (e.g., C(01:00)).
+    type: str
+    default: "01:00"
+
+  disable_ipv4_server:
+    description:
+      - Whether to disable the device's built-in IPv4 NTP server.
+    type: bool
+    default: true
+
+  disable_ipv6_server:
+    description:
+      - Whether to disable the device's built-in IPv6 NTP server.
+    type: bool
+    default: true
+
+  state:
+    description:
+      - Whether the configuration should be present or removed (undo all).
+    type: str
+    choices: [present, absent]
+    default: present
+
+  save_when:
+    description:
+      - When to save the device configuration.
+    type: str
+    choices: [never, changed, always]
+    default: changed
+
+  backup:
+    description:
+      - Whether to create a local backup of the current configuration.
+    type: bool
+    default: false
+
+  backup_path:
+    description:
+      - Optional path on the controller to store the backup file.
+    type: str
+    required: false
+
+notes:
+  - Requires C(ansible_connection=ansible.netcommon.network_cli).
+  - The module applies all configuration commands globally.
+  - This is not a full-featured time service configuration tool. It is meant for basic NTP/DST setup.
+
+seealso:
+  - module: vrp_config
+  - module: vrp_backup
 """
+
+EXAMPLES = r"""
+- name: Configure NTP with default timezone
+  blumleon.vrp.vrp_ntp:
+    server: <ntp-server-address>
+    save_when: changed
+
+- name: Disable all NTP settings and remove configuration
+  blumleon.vrp.vrp_ntp:
+    server: <ntp-server-address>
+    state: absent
+    save_when: always
+
+- name: Configure custom DST and timezone with source interface
+  blumleon.vrp.vrp_ntp:
+    server: 192.0.2.10
+    source_interface: Vlanif10
+    timezone_name: UTC
+    timezone_offset: 0
+    dst_name: MyDST
+    dst_start: "01:00 2025-04-01"
+    dst_end: "01:00 2025-10-01"
+    dst_offset: "01:00"
+    save_when: changed
+"""
+
+RETURN = r"""
+changed:
+  description: Whether any configuration was changed or a backup was created.
+  type: bool
+  returned: always
+
+commands:
+  description: List of CLI commands sent to the device.
+  type: list
+  elements: str
+  returned: when changed
+
+responses:
+  description: Output returned by the device for each command.
+  type: list
+  elements: str
+  returned: when changed
+
+backup_path:
+  description: Path to the configuration backup file, if created.
+  type: str
+  returned: when backup was requested
+"""
+
+from ansible.module_utils.basic import AnsibleModule
+from ansible.module_utils.connection import Connection
+from ansible_collections.blumleon.vrp.plugins.module_utils import vrp_common as vc
 
 
 def build_lines(p):
@@ -82,7 +215,6 @@ def main() -> None:
     body_cmds = vc.diff_line_match(running, [], build_lines(p), "present", keep=[])
     changed_config = bool(body_cmds)
 
-    # ------------------------------ Backup (neuer Helper)
     backup_changed, backup_path = vc.backup_config(
         conn,
         do_backup=p["backup"],
