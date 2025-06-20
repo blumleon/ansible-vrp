@@ -179,7 +179,7 @@ def main() -> None:
         cli_cmds = (
             ["system-view"] + parents + body_cmds + ["return"] * (len(parents) + 1)
         )
-        vc.append_save(cli_cmds, p["save_when"])
+        vc.append_save(cli_cmds, p["save_when"], changed=True)  # ← neues Flag
         responses = conn.run_commands(cli_cmds)
 
     module.exit_json(

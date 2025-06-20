@@ -46,7 +46,7 @@ options:
     description:
       - Name used for daylight saving time.
     type: str
-    default: Sommerzeit
+    default: DST
 
   dst_start:
     description:
@@ -181,18 +181,18 @@ def build_lines(p):
     if p.get("source_interface"):
         lines.append(f"ntp server source-interface {p['source_interface']}")
     if p["state"] == "absent":
-        lines = [f"undo {cmd}" for cmd in lines]
+        lines = [f"undo {l}" for l in lines]
     return lines
 
 
-def main() -> None:
+def main():
     module = AnsibleModule(
         argument_spec=dict(
             server=dict(type="str", required=True),
             source_interface=dict(type="str"),
             timezone_name=dict(type="str", default="CET"),
             timezone_offset=dict(type="int", default=1),
-            dst_name=dict(type="str", default="Sommerzeit"),
+            dst_name=dict(type="str", default="DST"),
             dst_start=dict(type="str", default="02:00 2025-03-30"),
             dst_end=dict(type="str", default="03:00 2025-10-26"),
             dst_offset=dict(type="str", default="01:00"),
@@ -210,31 +210,32 @@ def main() -> None:
 
     p = module.params
     conn = Connection(module._socket_path)
-    running = vc.load_running_config(conn)
 
-    body_cmds = vc.diff_line_match(running, [], build_lines(p), "present", keep=[])
-    changed_config = bool(body_cmds)
-
+    # ----------------------------------------------------------
     backup_changed, backup_path = vc.backup_config(
-        conn,
-        do_backup=p["backup"],
-        user_path=p.get("backup_path"),
-        prefix="vrp_ntp_",
+        conn, p["backup"], p.get("backup_path"), prefix="vrp_ntp_"
     )
 
-    changed = changed_config or backup_changed
+    diffed, cli = vc.diff_and_wrap(
+        conn,
+        parents=[],  # global context
+        cand_children=build_lines(p),  # desired lines
+        save_when=p["save_when"],
+        replace=False,
+        keep=[],
+    )
+
+    changed = diffed or backup_changed
 
     if module.check_mode:
-        module.exit_json(changed=changed, commands=body_cmds, backup_path=backup_path)
+        module.exit_json(changed=changed, commands=cli, backup_path=backup_path)
 
-    cli_cmds, responses = [], []
-    if changed_config:
-        cli_cmds = ["system-view"] + body_cmds + ["return"]
-        vc.append_save(cli_cmds, p["save_when"])
-        responses = conn.run_commands(cli_cmds)
-
+    responses = conn.run_commands(cli) if diffed else []
     module.exit_json(
-        changed=changed, commands=cli_cmds, responses=responses, backup_path=backup_path
+        changed=changed,
+        commands=cli,
+        responses=responses,
+        backup_path=backup_path,
     )
 
 

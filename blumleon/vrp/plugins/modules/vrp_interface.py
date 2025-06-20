@@ -10,85 +10,85 @@
 DOCUMENTATION = r"""
 ---
 module: vrp_interface
-short_description: Konfiguriert Huawei-VRP-Interfaces (L1 & L2) idempotent
+short_description: Configures Huawei VRP interfaces (L1 & L2) idempotently
 version_added: "1.0.0"
 author:
   - Leon Blum (@blumleon)
 description:
-  - Dieses Modul ermöglicht die konsistente Konfiguration von Interface-Parametern auf Huawei-VRP-Geräten.
-  - Unterstützt Layer-1 (Beschreibung, Admin-Status, MTU, Speed) sowie Layer-2 (Access/Trunk/Hybrid-Modi).
-  - Erkennt bestehende Konfiguration automatisch und führt nur nötige Änderungen durch.
-  - Unterstützt Checkmode und speichert Konfiguration optional persistent.
+  - This module enables consistent configuration of interface parameters on Huawei VRP devices.
+  - Supports Layer-1 (description, admin status, MTU, speed) and Layer-2 (access/trunk/hybrid modes).
+  - Automatically detects existing configuration and only applies necessary changes.
+  - Supports check mode and optionally saves the configuration persistently.
 options:
   name:
     description:
-      - Interface-Name, z. B. C(MultiGE1/0/20)
+      - Interface name, e.g. C(MultiGE1/0/20)
     required: true
     type: str
   admin_state:
     description:
-      - Administrative Schnittstellenstatus
+      - Administrative interface state
     type: str
     choices: [up, down]
   description:
     description:
-      - Interface-Beschreibung (leer = entfernen)
+      - Interface description (empty = remove)
     type: str
   speed:
     description:
-      - Fixe Geschwindigkeit, z. B. C(1000), abhängig vom Modell
+      - Fixed speed, e.g. C(1000), depending on the model
     type: str
   mtu:
     description:
-      - Maximale Paketgröße in Byte, z. B. C(1500)
+      - Maximum packet size in bytes, e.g. C(1500)
     type: int
   port_mode:
     description:
-      - Layer-2-Portmodus
+      - Layer-2 port mode
     type: str
     choices: [access, trunk, hybrid]
   vlan:
     description:
-      - VLAN-ID für Access-Ports
+      - VLAN ID for access ports
     type: int
   trunk_vlans:
     description:
-      - VLAN-Liste für Trunk- oder Hybrid-Ports, z. B. C(10,20-30)
+      - VLAN list for trunk or hybrid ports, e.g. C(10,20-30)
     type: str
   native_vlan:
     description:
-      - Native VLAN für Trunk-Ports (setzt PVID)
+      - Native VLAN for trunk ports (sets PVID)
     type: int
   state:
     description:
-      - Setzt das Interface auf C(present) (konfigurieren) oder C(absent) (zurücksetzen)
+      - Sets the interface to C(present) (configure) or C(absent) (reset)
     default: present
     type: str
     choices: [present, absent]
   save_when:
     description:
-      - Wann die Konfiguration gespeichert werden soll
+      - When to save the configuration
     type: str
     default: changed
     choices: [never, changed, always]
 notes:
-  - Für Switchports empfohlen – nicht geeignet für Loopbacks oder Mgmt-Interfaces.
-  - C(trunk_vlans) wird als Liste wie C("10,20-25") übergeben und automatisch formatiert.
-  - C(vlan) darf nur bei Access-Ports gesetzt werden, C(native_vlan) nur bei Trunk-Ports.
-  - Das Modul erkennt automatisch, ob z. B. C(undo shutdown) implizit aktiv ist.
+  - Recommended for switchports – not suitable for loopbacks or management interfaces.
+  - C(trunk_vlans) is passed as a list like C("10,20-25") and automatically formatted.
+  - C(vlan) may only be set on access ports, C(native_vlan) only on trunk ports.
+  - The module automatically detects if e.g. C(undo shutdown) is implicitly active.
 """
 
 EXAMPLES = r"""
-- name: Einfacher Access-Port (VLAN 20)
+- name: Simple access port (VLAN 20)
   blumleon.vrp.vrp_interface:
     name: MultiGE1/0/14
     port_mode: access
     vlan: 20
-    description: "Client-Port"
+    description: "Client port"
     admin_state: up
     save_when: changed
 
-- name: Trunk-Port mit VLAN-Liste (native VLAN 55)
+- name: Trunk port with VLAN list (native VLAN 55)
   blumleon.vrp.vrp_interface:
     name: MultiGE1/0/30
     port_mode: trunk
@@ -98,7 +98,7 @@ EXAMPLES = r"""
     admin_state: up
     save_when: always
 
-- name: Hybrid-Port mit VLAN-Tagging
+- name: Hybrid port with VLAN tagging
   blumleon.vrp.vrp_interface:
     name: MultiGE1/0/31
     port_mode: hybrid
@@ -107,7 +107,7 @@ EXAMPLES = r"""
     description: "IoT Segment"
     admin_state: up
 
-- name: Interface auf Werkzustand zurücksetzen
+- name: Reset interface to factory default
   blumleon.vrp.vrp_interface:
     name: MultiGE1/0/31
     state: absent
@@ -115,7 +115,7 @@ EXAMPLES = r"""
 
 RETURN = r"""
 commands:
-  description: Liste der gesendeten CLI-Befehle
+  description: List of CLI commands sent
   returned: always
   type: list
   elements: raw
@@ -133,7 +133,7 @@ commands:
       answer: 'Y'
 
 responses:
-  description: CLI-Antworten vom Gerät (sofern Befehle gesendet wurden)
+  description: CLI responses from the device (if commands were sent)
   returned: when changed
   type: list
   elements: str
@@ -152,10 +152,10 @@ def _validate_params(module, p):
     if mode == "access":
         if p.get("trunk_vlans") or p.get("native_vlan"):
             module.fail_json(
-                msg="trunk_vlans / native_vlan sind bei access nicht erlaubt"
+                msg="trunk_vlans' and 'native_vlan' are not allowed in access mode"
             )
     if mode in ("trunk", "hybrid") and p.get("vlan") is not None:
-        module.fail_json(msg="Parameter 'vlan' ist nur bei port_mode=access zulässig")
+        module.fail_json(msg="Parameter 'vlan' is only valid when port_mode is set to 'access'")
 
 
 # --------------------------------------------------------------------------- #

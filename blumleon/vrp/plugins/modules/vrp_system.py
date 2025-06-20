@@ -150,27 +150,41 @@ def main():
         cmds.append(cmd)
 
     for ip in p.get("ipv6") or []:
-        cmd = f"dns ipv6 server {ip}"
+        cmd = f"dns server ipv6 {ip}"
         if p["state"] == "absent":
             cmd = "undo " + cmd
         cmds.append(cmd)
 
-    # Step 3: exit early if nothing to do
-    if not cmds:
-        module.exit_json(changed=changed, backup_path=backup_file)
+    # ------------------------------------------------------------------
+    # Step 3: Use central diff engine
+    # ------------------------------------------------------------------
+    diffed, cli = vc.diff_and_wrap(
+        conn,
+        parents=[],
+        cand_children=cmds,
+        save_when=p["save_when"],
+        replace=False,
+        keep=[],
+    )
 
-    # Step 4: compare running config
-    running = vc.load_running_config(conn)
-    if p["state"] == "present" and vc.lines_present(running, cmds):
-        module.exit_json(changed=changed, backup_path=backup_file)
-
-    # Step 5: prepare CLI + check mode
-    diffed, cli = vc.diff_and_wrap(conn, [], cmds, p["save_when"], replace=False)
+    # ------------------------------------------------------------------
+    # Step 4: Check-Mode?
+    # ------------------------------------------------------------------
     if module.check_mode:
-        module.exit_json(changed=changed or diffed, commands=cli)
+        module.exit_json(
+            changed=changed or diffed,
+            commands=cli,
+            backup_path=backup_file,
+        )
 
-    # Step 6: send commands
+    # ------------------------------------------------------------------
+    # Step 5: Send commands (only if necessary)Return result
+    # ------------------------------------------------------------------
     responses = conn.run_commands(cli) if diffed else []
+
+    # ------------------------------------------------------------------
+    # Step 6: Return result
+    # ------------------------------------------------------------------
     module.exit_json(
         changed=changed or diffed,
         commands=cli,
