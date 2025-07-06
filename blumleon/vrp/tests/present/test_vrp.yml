@@ -1,0 +1,24 @@
+- name: Test Huawei VRP Collection
+  hosts: huawei_switch
+  gather_facts: no
+  connection: ansible.netcommon.network_cli
+  tasks:
+    - name: Show device version
+      blumleon.vrp.vrp_command:
+        commands: display version
+      register: version_out
+
+    - name: Output device version
+      debug:
+        var: version_out.stdout[0]
+
+    - name: Run additional commands
+      blumleon.vrp.vrp_command:
+        commands:
+          - display interface brief
+          - display ip routing-table
+      register: output
+
+    - name: Show command output
+      debug:
+        var: output.stdout

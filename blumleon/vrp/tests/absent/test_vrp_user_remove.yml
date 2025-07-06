@@ -1,0 +1,10 @@
+- name: Delete local AAA user ansible_user
+  hosts: huawei_switch
+  gather_facts: no
+  connection: ansible.netcommon.network_cli
+  tasks:
+    - name: Remove RSA user and peer-key
+      blumleon.vrp.vrp_user:
+        name: ansible_user
+        state: absent
+        save_when: always

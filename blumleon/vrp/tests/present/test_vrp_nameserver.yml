@@ -1,0 +1,12 @@
+- name: Configure DNS and domain name
+  hosts: huawei_switch
+  gather_facts: no
+  connection: ansible.netcommon.network_cli
+  tasks:
+    - name: Apply DNS configuration
+      blumleon.vrp.vrp_system:
+        domain_name: example.com
+        ipv4:
+          - 192.0.2.1
+          - 192.0.2.2
+        save_when: changed

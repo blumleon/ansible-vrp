@@ -162,16 +162,18 @@ backup_path:
   type: str
   returned: when backup was requested
 """
-
 from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils.connection import Connection
 from ansible_collections.blumleon.vrp.plugins.module_utils import vrp_common as vc
 
 
-def build_lines(p):
+def _build_desired_lines(p: dict) -> list[str]:
     lines = [
         f"clock timezone {p['timezone_name']} add {p['timezone_offset']}",
-        f"clock daylight-saving-time {p['dst_name']} one-year {p['dst_start']} {p['dst_end']} {p['dst_offset']}",
+        (
+            f"clock daylight-saving-time {p['dst_name']} one-year "
+            f"{p['dst_start']} {p['dst_end']} {p['dst_offset']}"
+        ),
         f"ntp unicast-server {p['server']}",
     ]
     if p["disable_ipv4_server"]:
@@ -180,60 +182,60 @@ def build_lines(p):
         lines.append("ntp ipv6 server disable")
     if p.get("source_interface"):
         lines.append(f"ntp server source-interface {p['source_interface']}")
-    if p["state"] == "absent":
-        lines = [f"undo {l}" for l in lines]
     return lines
 
 
-def main():
-    module = AnsibleModule(
-        argument_spec=dict(
-            server=dict(type="str", required=True),
-            source_interface=dict(type="str"),
-            timezone_name=dict(type="str", default="CET"),
-            timezone_offset=dict(type="int", default=1),
-            dst_name=dict(type="str", default="DST"),
-            dst_start=dict(type="str", default="02:00 2025-03-30"),
-            dst_end=dict(type="str", default="03:00 2025-10-26"),
-            dst_offset=dict(type="str", default="01:00"),
-            disable_ipv4_server=dict(type="bool", default=True),
-            disable_ipv6_server=dict(type="bool", default=True),
-            state=dict(type="str", choices=["present", "absent"], default="present"),
-            save_when=dict(
-                type="str", choices=["never", "changed", "always"], default="changed"
-            ),
-            backup=dict(type="bool", default=False),
-            backup_path=dict(type="str"),
+def main() -> None:
+    arg_spec = dict(
+        server=dict(type="str", required=True),
+        source_interface=dict(type="str"),
+        timezone_name=dict(type="str", default="CET"),
+        timezone_offset=dict(type="int", default=1),
+        dst_name=dict(type="str", default="DST"),
+        dst_start=dict(type="str", default="02:00 2025-03-30"),
+        dst_end=dict(type="str", default="03:00 2025-10-26"),
+        dst_offset=dict(type="str", default="01:00"),
+        disable_ipv4_server=dict(type="bool", default=True),
+        disable_ipv6_server=dict(type="bool", default=True),
+        state=dict(type="str", choices=["present", "absent"], default="present"),
+        save_when=dict(
+            type="str", choices=["never", "changed", "always"], default="changed"
         ),
-        supports_check_mode=True,
+        backup=dict(type="bool", default=False),
+        backup_path=dict(type="str"),
     )
 
+    module = AnsibleModule(argument_spec=arg_spec, supports_check_mode=True)
     p = module.params
     conn = Connection(module._socket_path)
 
-    # ----------------------------------------------------------
     backup_changed, backup_path = vc.backup_config(
         conn, p["backup"], p.get("backup_path"), prefix="vrp_ntp_"
     )
 
-    diffed, cli = vc.diff_and_wrap(
+    desired_lines = _build_desired_lines(p)
+    desired_state = "absent" if p["state"] == "absent" else "present"
+
+    # Diff & Wrapper
+    changed_cfg, cli_cmds = vc.diff_and_wrap(
         conn,
-        parents=[],  # global context
-        cand_children=build_lines(p),  # desired lines
+        parents=[],
+        cand_children=desired_lines,
         save_when=p["save_when"],
+        state=desired_state,
         replace=False,
         keep=[],
     )
 
-    changed = diffed or backup_changed
+    changed = changed_cfg or backup_changed
 
     if module.check_mode:
-        module.exit_json(changed=changed, commands=cli, backup_path=backup_path)
+        module.exit_json(changed=changed, commands=cli_cmds, backup_path=backup_path)
 
-    responses = conn.run_commands(cli) if diffed else []
+    responses = conn.run_commands(cli_cmds) if changed_cfg else []
     module.exit_json(
         changed=changed,
-        commands=cli,
+        commands=cli_cmds,
         responses=responses,
         backup_path=backup_path,
     )

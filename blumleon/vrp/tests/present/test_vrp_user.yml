@@ -1,0 +1,11 @@
+- name: Configure admin user with SSH key
+  hosts: huawei_switch
+  gather_facts: no
+  connection: ansible.netcommon.network_cli
+  tasks:
+    - name: Create user with SSH public key
+      blumleon.vrp.vrp_user:
+        name: ansible_user
+        ssh_key: "ssh-rsa AAAAB3Nza...generated-key (dummy test key – do not use)"
+        level: 3
+        save_when: changed

@@ -1,0 +1,9 @@
+- name: Configure NTP server
+  hosts: huawei_switch
+  gather_facts: no
+  connection: ansible.netcommon.network_cli
+  tasks:
+    - name: Apply NTP settings
+      blumleon.vrp.vrp_ntp:
+        server: 192.0.2.1
+        save_when: changed

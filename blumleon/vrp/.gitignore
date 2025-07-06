@@ -9,17 +9,6 @@ __pycache__/
 *.swo
 *.bak
 
-# Ansible inventory/test/playbook stuff
-hosts
-hosts.yml
-inventory
-*.retry
-*.orig
-*.tmp
-*.out
-test_*.yml
-test_*/         # falls du Testverzeichnisse hast
-
 # Ansible Collection temp/build folders
 dist/
 .eggs/

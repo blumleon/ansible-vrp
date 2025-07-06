@@ -1,0 +1,11 @@
+- name: Remove DNS + domain configuration
+  hosts: huawei_switch
+  gather_facts: no
+  connection: ansible.netcommon.network_cli
+  tasks:
+    - name: Undo global DNS settings
+      blumleon.vrp.vrp_system:
+        domain_name: example.com
+        ipv4: [192.0.2.1, 192.0.2.2]
+        state: absent
+        save_when: always

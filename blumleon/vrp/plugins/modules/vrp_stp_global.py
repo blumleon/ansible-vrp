@@ -9,30 +9,18 @@
 
 DOCUMENTATION = r"""
 ---
-module: vrp_system
-short_description: Configure system-level settings on Huawei VRP devices
+module: vrp_stp_global
+short_description: Configure global STP protection on Huawei VRP
 version_added: "1.0.0"
 author: Leon Blum (@blumleon)
 description:
-  - Configures IPv4/IPv6 DNS name servers and domain name on Huawei VRP.
+  - Enables or disables global Spanning Tree protection features such as BPDU protection.
   - Always applies global (non-interface) settings.
 options:
-  domain_name:
+  bpdu_protect:
     description:
-      - Domain name to set globally (e.g., example.com).
-    type: str
-
-  ipv4:
-    description:
-      - List of IPv4 DNS servers.
-    type: list
-    elements: str
-
-  ipv6:
-    description:
-      - List of IPv6 DNS servers.
-    type: list
-    elements: str
+      - Enables or disables STP BPDU protection globally.
+    type: bool
 
   state:
     description:
@@ -62,28 +50,22 @@ options:
 
 notes:
   - Requires C(ansible_connection=ansible.netcommon.network_cli).
-  - Always affects global config.
+  - Only affects global config.
 """
 
 EXAMPLES = r"""
-- name: Set domain and DNS servers
-  blumleon.vrp.vrp_system:
-    domain_name: example.com
-    ipv4:
-      - 192.0.2.1
-      - 192.0.2.2
-    save_when: changed
+- name: Enable global BPDU protection
+  blumleon.vrp.vrp_stp_global:
+    bpdu_protect: true
 
-- name: Remove all DNS and domain config
-  blumleon.vrp.vrp_system:
-    domain_name: example.com
-    ipv4:
-      - 192.0.2.1
-      - 192.0.2.2
-    ipv6:
-      - 2001:db8::1
+- name: Disable BPDU protection
+  blumleon.vrp.vrp_stp_global:
+    bpdu_protect: false
+
+- name: Remove BPDU protection configuration explicitly
+  blumleon.vrp.vrp_stp_global:
+    bpdu_protect: true
     state: absent
-    save_when: always
 """
 
 RETURN = r"""
@@ -116,26 +98,16 @@ from ansible_collections.blumleon.vrp.plugins.module_utils import vrp_common as 
 
 
 def _build_desired_lines(p: dict) -> list[str]:
-    """Return the *desired* configuration lines – never pre-prended with "undo"."""
-    lines: list[str] = []
-
-    if p.get("domain_name"):
-        lines.append(f"ip domain-name {p['domain_name']}")
-
-    for ip in p.get("ipv4") or []:
-        lines.append(f"dns server {ip}")
-
-    for ip in p.get("ipv6") or []:
-        lines.append(f"dns server ipv6 {ip}")
-
-    return lines
+    if p.get("bpdu_protect") is True:
+        return ["stp bpdu-protection"]
+    if p["state"] == "absent":
+        return ["stp bpdu-protection"]
+    return []
 
 
 def main() -> None:
     arg_spec = dict(
-        domain_name=dict(type="str"),
-        ipv4=dict(type="list", elements="str"),
-        ipv6=dict(type="list", elements="str"),
+        bpdu_protect=dict(type="bool"),
         state=dict(type="str", choices=["present", "absent"], default="present"),
         save_when=dict(
             type="str", choices=["never", "changed", "always"], default="changed"
@@ -150,10 +122,10 @@ def main() -> None:
 
     # optional backup
     backup_changed, backup_path = vc.backup_config(
-        conn, p["backup"], p.get("backup_path"), prefix="vrp_system_"
+        conn, p["backup"], p.get("backup_path"), prefix="vrp_stp_"
     )
 
-    # build desired body
+    # desired body
     desired_lines = _build_desired_lines(p)
     desired_state = "absent" if p["state"] == "absent" else "present"
 
@@ -164,13 +136,12 @@ def main() -> None:
         cand_children=desired_lines,
         save_when=p["save_when"],
         state=desired_state,
-        replace=False,
+        replace=(desired_state == "absent"),
         keep=[],
     )
 
     changed = cfg_changed or backup_changed
 
-    # check-mode
     if module.check_mode:
         module.exit_json(
             changed=changed,
@@ -178,7 +149,6 @@ def main() -> None:
             backup_path=backup_path,
         )
 
-    # execute & return
     responses = conn.run_commands(cli_cmds) if cfg_changed else []
 
     module.exit_json(

@@ -102,31 +102,34 @@ stdout_lines:
 """
 
 import time
-from typing import List
 
+from ansible.module_utils._text import to_text
 from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils.connection import Connection
-from ansible.module_utils._text import to_text
-
-__all__ = ["main"]
 
 
 def _conditions_met(
-    outputs: List[str], wait_for: List[str], match: str = "all"
+    outputs: list[str], wait_for: list[str], match: str = "all"
 ) -> bool:
-    """Check conditions‐Syntax `result[i] (not )?contains TEXT`."""
+    """
+    Evaluate *wait_for* expressions.
+
+    Supported syntax:
+        result[i] contains TEXT
+        result[i] not contains TEXT
+    """
     if not wait_for:
         return True
 
     def _check(cond: str) -> bool:
         neg = " not contains " in cond.lower()
-        idx, _sep, text = cond.partition("contains")
+        idx_part, _sep, text_part = cond.partition("contains")
         try:
-            idx = int(idx[idx.find("[") + 1 : idx.find("]")])
-        except ValueError:
+            idx = int(idx_part[idx_part.find("[") + 1 : idx_part.find("]")])
+        except (ValueError, IndexError):
             return False
 
-        text = text.strip().strip("'\"")
+        text = text_part.strip().strip("'\"")
         found = text in outputs[idx]
         return not found if neg else found
 
@@ -135,6 +138,7 @@ def _conditions_met(
 
 
 def run_module() -> None:
+    """Main worker that executes commands and handles wait_for logic."""
     module = AnsibleModule(
         argument_spec=dict(
             commands=dict(type="list", elements="raw", required=True),
@@ -146,22 +150,22 @@ def run_module() -> None:
         supports_check_mode=True,
     )
 
-    # ---------------------------------------------------------------- params
+    # parameters
     commands = module.params["commands"]
     if isinstance(commands, str):
         commands = [commands]
 
-    wait_for = module.params.get("wait_for") or []
-    match = module.params["match"]
-    retries = module.params["retries"]
-    interval = module.params["interval"]
+    wait_for: list[str] = module.params.get("wait_for") or []
+    match: str = module.params["match"]
+    retries: int = module.params["retries"]
+    interval: int = module.params["interval"]
 
     if module.check_mode:
         module.exit_json(changed=False)
 
-    # ---------------------------------------------------------------- execute
+    # execution
     conn = Connection(module._socket_path)
-    stdout: List[str] = []
+    stdout: list[str] = []
 
     for attempt in range(1, retries + 1):
         try:

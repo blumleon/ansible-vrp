@@ -120,44 +120,50 @@ responses:
   returned: when changed
 """
 
+import traceback
+
 from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils.connection import Connection
 from ansible_collections.blumleon.vrp.plugins.module_utils import vrp_common as vc
 
 
-# ------------------------------------------------------------------- helpers
 def _split_key_vrp(pub: str) -> list[str]:
-    """
-    Returns the OpenSSH key exactly as it was transferred,
-    without wraps or formatting - necessary for VRP import.
-    """
+    """Return the key exactly as provided (single-line import)."""
     return [pub.strip()]
 
 
 def _aaa_one_liners(p):
-    name = p["name"]
-    l = []
+    n = p["name"]
+    out: list[str] = []
     if p.get("password"):
-        l.append(f"local-user {name} password irreversible-cipher {p['password']}")
+        out.append(f"local-user {n} password irreversible-cipher {p['password']}")
     if p.get("level") is not None:
-        l.append(f"local-user {name} privilege level {p['level']}")
+        out.append(f"local-user {n} privilege level {p['level']}")
     if p.get("service_type"):
-        l.append(f"local-user {name} service-type {p['service_type']}")
-    return l
+        out.append(f"local-user {n} service-type {p['service_type']}")
+    return out
 
 
 def _ssh_user_block(p):
     n = p["name"]
     return [
         f"ssh user {n} authentication-type rsa",
-        f"ssh user {n} assign rsa-key {n}",
         f"ssh user {n} service-type stelnet",
     ]
 
 
-# ------------------------------------------------------------------- main
-def main():
-    args = dict(
+def _safe_run(conn, final, module):
+    resp: list[str] = []
+    try:
+        for cmd in final:
+            resp += conn.run_commands([cmd])
+        return resp
+    except Exception:
+        module.fail_json(msg="Command execution failed", debug=[traceback.format_exc()])
+
+
+def main() -> None:
+    spec = dict(
         name=dict(type="str", required=True),
         password=dict(type="str", no_log=True),
         ssh_key=dict(type="str", no_log=True),
@@ -168,108 +174,85 @@ def main():
             type="str", choices=["never", "changed", "always"], default="changed"
         ),
     )
-    module = AnsibleModule(argument_spec=args, supports_check_mode=True)
-    p = module.params
-    conn = Connection(module._socket_path)
+    module = AnsibleModule(argument_spec=spec, supports_check_mode=True)
+    p, conn = module.params, Connection(module._socket_path)
+    n = p["name"]
 
-    name = p["name"]
-    all_cmds, changed = [], False
+    cli: list = []
+    changed = False
 
-    # ---------------------------------------------------- SSH-key-user
     if p["state"] == "present" and p.get("ssh_key"):
-        parent_cmd = f"rsa peer-public-key {name} encoding-type openssh"
-        c1, cmds1 = vc.diff_and_wrap(
-            conn, [], [parent_cmd], save_when=p["save_when"], replace=False
-        )
-        all_cmds += cmds1
-        changed |= c1
-
-        if changed and not module.check_mode:
-            key_lines = _split_key_vrp(p["ssh_key"])
-
-            cmd_list = [
-                "system-view",
-                parent_cmd,
-                "public-key-code begin",
-                *key_lines,
-                "public-key-code end",
-                "peer-public-key end",
-                "return",
-            ]
-            conn.run_commands(cmd_list)
-            all_cmds += cmd_list
-
-        aaa_lines = []
-        if p.get("level") is not None:
-            aaa_lines.append(f"local-user {name} privilege level {p['level']}")
-        if p.get("service_type"):
-            aaa_lines.append(f"local-user {name} service-type {p['service_type']}")
-        c2, cmds2 = vc.diff_and_wrap(
-            conn, ["aaa"], aaa_lines, save_when=p["save_when"], replace=False
-        )
-        all_cmds += cmds2
-        changed |= c2
-
-        c3, cmds3 = vc.diff_and_wrap(
-            conn, [], _ssh_user_block(p), save_when=p["save_when"], replace=False
-        )
-        all_cmds += cmds3
-        changed |= c3
-
-    # ---------------------------------------------------- classic user
-    elif p["state"] == "present":
-        c2, cmds2 = vc.diff_and_wrap(
-            conn, ["aaa"], _aaa_one_liners(p), save_when=p["save_when"], replace=False
-        )
-        all_cmds += cmds2
-        changed |= c2
-
-    # ---------------------------------------------------- remove user
-    else:
-        sys_un = [
-            f"undo ssh user {name} authentication-type rsa",
-            f"undo ssh user {name} assign rsa-key {name}",
-            f"undo ssh user {name} service-type stelnet",
-            f"undo rsa peer-public-key {name}",
+        cli += [
+            "system-view",
+            vc.wrap_cmd(f"rsa peer-public-key {n} encoding-type openssh", user=n),
+            "public-key-code begin",
+            *_split_key_vrp(p["ssh_key"]),
+            "public-key-code end",
+            "peer-public-key end",
+            "return",
+            "system-view",
+            vc.wrap_cmd(f"ssh user {n} assign rsa-key {n}", user=n),
+            "return",
+            vc.wrap_cmd("save"),
         ]
-        c1, cmds1 = vc.diff_and_wrap(conn, [], sys_un, p["save_when"], False)
-        all_cmds += cmds1
-        changed |= c1
+        changed = True
 
-        c2, cmds2 = vc.diff_and_wrap(
-            conn, ["aaa"], [f"undo local-user {name}"], p["save_when"], False
+        c2, cli2 = vc.diff_and_wrap(
+            conn,
+            ["aaa"],
+            _aaa_one_liners(p),
+            p["save_when"],
+            replace=False,
+            state="present",
         )
-        all_cmds += cmds2
+        c3, cli3 = vc.diff_and_wrap(
+            conn, [], _ssh_user_block(p), p["save_when"], replace=False, state="present"
+        )
+        cli += [vc.wrap_cmd(cmd, user=n) for cmd in cli2]
+        cli += [vc.wrap_cmd(cmd, user=n) for cmd in cli3]
+        changed |= c2 or c3
+
+    elif p["state"] == "present":
+        c2, cli2 = vc.diff_and_wrap(
+            conn,
+            ["aaa"],
+            _aaa_one_liners(p),
+            p["save_when"],
+            replace=False,
+            state="present",
+        )
+        cli += [vc.wrap_cmd(cmd, user=n) for cmd in cli2]
         changed |= c2
+
+    else:
+        lines_global = [
+            f"ssh user {n} authentication-type rsa",
+            f"ssh user {n} assign rsa-key {n}",
+            f"ssh user {n} service-type stelnet",
+            f"rsa peer-public-key {n} encoding-type openssh",
+        ]
+        lines_aaa = [
+            f"local-user {n} password irreversible-cipher dummy",
+            f"local-user {n} privilege level 3",
+            f"local-user {n} service-type ssh",
+        ]
+
+        c1, cli1 = vc.diff_and_wrap(
+            conn, [], lines_global, p["save_when"], replace=False, state="absent"
+        )
+        c2, cli2 = vc.diff_and_wrap(
+            conn, ["aaa"], lines_aaa, p["save_when"], replace=False, state="absent"
+        )
+
+        cli += [vc.wrap_cmd(cmd, user=n) for cmd in cli1]
+        cli += [vc.wrap_cmd(cmd, user=n) for cmd in cli2]
+        changed |= c1 or c2
 
     if module.check_mode:
-        module.exit_json(changed=changed, commands=all_cmds)
+        module.exit_json(changed=changed, commands=cli)
 
-    # Prompt-Handling
-    priv_cmd = (
-        f"local-user {name} privilege level {p.get('level')}"
-        if p.get("level") is not None
-        else None
-    )
-    final_cmds = []
-    for cmd in all_cmds:
-        if isinstance(cmd, str):
-            if priv_cmd and cmd == priv_cmd:
-                final_cmds.append(
-                    {"command": cmd, "prompt": r"[Yy]/[Nn]", "answer": "y"}
-                )
-            elif cmd.startswith(f"undo rsa peer-public-key {name}"):
-                final_cmds.append(
-                    {"command": cmd, "prompt": r"\[Y/N\]:", "answer": "y"}
-                )
-            else:
-                final_cmds.append(cmd)
-        else:
-            # dict or already prepared prompt → simply pass through
-            final_cmds.append(cmd)
-
-    resp = conn.run_commands(final_cmds) if changed else []
-    module.exit_json(changed=changed, commands=final_cmds, responses=resp)
+    resp = _safe_run(conn, cli, module) if changed else []
+    module.exit_json(changed=changed, commands=cli, responses=resp)
 
 
 if __name__ == "__main__":

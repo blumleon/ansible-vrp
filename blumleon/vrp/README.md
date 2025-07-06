@@ -14,10 +14,9 @@
 4. [Quick Start](#quick-start)  
 5. [Included Plugins & Modules](#included-plugins--modules)  
 6. [Examples](#examples)  
-7. [Development & Testing](#development--testing)  
-8. [Contributing](#contributing)  
-9. [License](#license)  
-10. [Author & Support](#author--support)  
+7. [Contributing](#contributing)  
+8. [License](#license)  
+9. [Author](#author)  
 
 ---
 
@@ -25,7 +24,7 @@
 
 - Clean CLI abstraction via `network_cli`
 - Native modules for VLAN, Interface, NTP, User, DNS, Config Backup
-- Fully idempotent logic & check-mode support
+- Idempotent logic & check-mode support  (except `vrp_user` module)
 - Built-in `cliconf` and `terminal` plugin
 
 ## Supported Platforms & Requirements

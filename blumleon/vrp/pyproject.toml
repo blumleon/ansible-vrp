@@ -1,9 +1,10 @@
-# pyproject.toml
-
 [tool.black]
 line-length = 88
-target-version = ['py38']
+target-version = ['py310']
 
 [tool.ruff]
 line-length = 88
-extend-ignore = ["E402"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]  
+extend-ignore = ["E402", "E501"] 

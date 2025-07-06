@@ -26,33 +26,32 @@ notes:
 seealso:
   - module: vrp_command
 """
-
 import json
 import re
-from typing import List, Union
+from typing import Union
 
+from ansible.errors import AnsibleError
+from ansible.module_utils._text import to_text
 from ansible.plugins.cliconf import CliconfBase, enable_mode
 from ansible_collections.ansible.netcommon.plugins.module_utils.network.common.utils import (
     to_list,
 )
-from ansible.errors import AnsibleError
-from ansible.module_utils._text import to_text
 
 
 class Cliconf(CliconfBase):
     """CLI context for VRP devices."""
 
-    # ------------------------------------------------------------------ helpers
+    # helpers -----------------------------------------------------------------
     def _send(self, cmd: str, **kwargs) -> str:
         """Unique wrapper around `self.send_command`."""
         return to_text(self.send_command(cmd, **kwargs), errors="surrogate_or_strict")
 
-    # ---------------------------------------------------------------- single-GET
+    # single-GET ---------------------------------------------------------------
     def get(self, command, **kwargs):
         """Compatible single version (requires CliconfBase)."""
         return self._send(command, **kwargs)
 
-    # ---------------------------------------------------------------- device-info
+    # device-info --------------------------------------------------------------
     def get_device_info(self) -> dict:
         """Reads version, model & hostname from `display version`."""
         data = self._send("display version")
@@ -69,7 +68,7 @@ class Cliconf(CliconfBase):
 
         return info
 
-    # -------------------------------------------------------------- config ops
+    # config ops ---------------------------------------------------------------
     @enable_mode
     def get_config(self, source="running", flags=None, format="text"):
         if source != "running":
@@ -78,21 +77,23 @@ class Cliconf(CliconfBase):
 
     @enable_mode
     def edit_config(self, commands=None, commit=False):
-        """Simple Edit-Config: system-view → Commands → return."""
+        """Simple Edit-Config: system-view -> Commands -> return."""
         if not commands:
             return []
         cmds = ["system-view"] + to_list(commands) + ["return"]
         return [self._send(c) for c in cmds][1:-1]
 
-    # ---------------------------------------------------------------- commands
+    # commands -----------------------------------------------------------------
     def run_commands(
-        self, commands: Union[str, List[Union[str, dict]]], check_rc=True
-    ) -> List[str]:
+        self,
+        commands: Union[str, list[Union[str, dict]]],
+        check_rc: bool = True,
+    ) -> list[str]:
         """API that is called by the `vrp_command` module."""
         if not commands:
             raise AnsibleError("'commands' argument is required")
 
-        results = []
+        results: list[str] = []
         for item in to_list(commands):
             if isinstance(item, dict):
                 cmd = item.get("command")
@@ -111,7 +112,7 @@ class Cliconf(CliconfBase):
                 results.append(self._send(item))
         return results
 
-    # ---------------------------------------------------------------- misc
+    # misc ---------------------------------------------------------------------
     def get_capabilities(self) -> str:
         """For `ansible-doc -t cliconf blumleon.vrp.vrp`."""
         return json.dumps(super().get_capabilities())

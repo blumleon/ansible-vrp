@@ -1,0 +1,33 @@
+- name: Configure three interfaces (Access + Trunk + Hybrid)
+  hosts: huawei_switch
+  gather_facts: no
+  connection: ansible.netcommon.network_cli
+  tasks:
+    - name: Configure access port MultiGE1/0/10
+      blumleon.vrp.vrp_interface:
+        name: MultiGE1/0/10
+        port_mode: access
+        vlan: 20
+        description: "Access Port – VLAN 20"
+        admin_state: up
+        save_when: changed
+
+    - name: Configure trunk port MultiGE1/0/11
+      blumleon.vrp.vrp_interface:
+        name: MultiGE1/0/11
+        port_mode: trunk
+        trunk_vlans: "100-102,200"
+        native_vlan: 100
+        description: "Trunk Port – Native 100, Allowed 100-102,200"
+        admin_state: up
+        save_when: changed
+
+    - name: Configure hybrid port MultiGE1/0/12
+      blumleon.vrp.vrp_interface:
+        name: MultiGE1/0/12
+        port_mode: hybrid
+        trunk_vlans: "300-302,400"
+        native_vlan: 300
+        description: "Hybrid Port – Native 300, Tagged 300-302,400"
+        admin_state: up
+        save_when: changed

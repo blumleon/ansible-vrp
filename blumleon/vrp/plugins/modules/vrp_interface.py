@@ -59,6 +59,12 @@ options:
     description:
       - Native VLAN for trunk ports (sets PVID)
     type: int
+  stp_edged:
+    description:
+      - Enables STP edge port mode (fast transition to forwarding)
+      - Only valid in access mode
+    type: bool
+    default: false
   state:
     description:
       - Sets the interface to C(present) (configure) or C(absent) (reset)
@@ -144,71 +150,70 @@ from ansible.module_utils.connection import Connection
 from ansible_collections.blumleon.vrp.plugins.module_utils import vrp_common as vc
 
 
-# --------------------------------------------------------------------------- #
-#  Parameter-validation                                                       #
-# --------------------------------------------------------------------------- #
 def _validate_params(module, p):
+    """Fail fast on mutually-exclusive interface parameters."""
     mode = p.get("port_mode")
+
     if mode == "access":
         if p.get("trunk_vlans") or p.get("native_vlan"):
             module.fail_json(
-                msg="trunk_vlans' and 'native_vlan' are not allowed in access mode"
+                msg="'trunk_vlans' and 'native_vlan' are not allowed in access mode"
             )
+
     if mode in ("trunk", "hybrid") and p.get("vlan") is not None:
-        module.fail_json(msg="Parameter 'vlan' is only valid when port_mode is set to 'access'")
+        module.fail_json(
+            msg="'vlan' can only be used when port_mode is set to 'access'"
+        )
+
+    if p.get("stp_edged") and mode != "access":
+        module.fail_json(
+            msg="'stp_edged' is only supported when port_mode is set to 'access'"
+        )
 
 
-# --------------------------------------------------------------------------- #
-#  Main                                                                       #
-# --------------------------------------------------------------------------- #
 def main() -> None:
     spec = dict(
-        # ---------- L1
+        # Layer-1 options
         name=dict(type="str", required=True),
         admin_state=dict(type="str", choices=["up", "down"]),
         description=dict(type="str"),
         speed=dict(type="str"),
         mtu=dict(type="int"),
-        # ---------- L2
+        # Layer-2 options
         port_mode=dict(type="str", choices=["access", "trunk", "hybrid"]),
         vlan=dict(type="int"),
         trunk_vlans=dict(type="str"),
         native_vlan=dict(type="int"),
-        # ---------- Meta
+        stp_edged=dict(type="bool", default=False),
+        # Meta
         state=dict(type="str", choices=["present", "absent"], default="present"),
         save_when=dict(
             type="str", choices=["never", "changed", "always"], default="changed"
         ),
     )
+
     module = AnsibleModule(argument_spec=spec, supports_check_mode=True)
     p = module.params
     _validate_params(module, p)
 
     conn = Connection(module._socket_path)
-    parents = f"interface {p['name']}"
+    parents = [f"interface {p['name']}"]
 
-    # -----------  Body ------------------------------------------
+    # desired body / state
     if p["state"] == "absent":
-        body = [
-            "undo description",
-            "shutdown",
-            "undo speed",
-            "undo mtu",
-            "undo port link-type",
-            "undo port default vlan",
-        ]
-        replace = False
+        body = ["shutdown"]
+        diff_state = "replace"
     else:
         body = vc.build_interface_lines(p)
-        replace = True
+        diff_state = "replace"
 
-    # ----------- central diff + save --------------------------------------
+    # diff + wrapper
     changed, cli_cmds = vc.diff_and_wrap(
         conn,
-        parents=[parents],
+        parents=parents,
         cand_children=body,
         save_when=p["save_when"],
-        replace=replace,
+        state=diff_state,
         keep=[],
     )
 

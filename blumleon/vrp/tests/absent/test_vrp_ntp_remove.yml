@@ -1,0 +1,10 @@
+- name: Undo NTP, timezone and DST settings
+  hosts: huawei_switch
+  gather_facts: no
+  connection: ansible.netcommon.network_cli
+  tasks:
+    - name: Remove the previously configured NTP server and time settings
+      blumleon.vrp.vrp_ntp:
+        server: 192.0.2.1
+        state: absent
+        save_when: always

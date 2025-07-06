@@ -1,7 +1,0 @@
-dist/
-*.tar.gz
-__pycache__/
-*.pyc
-MANIFEST.json
-FILES.json
-tests/

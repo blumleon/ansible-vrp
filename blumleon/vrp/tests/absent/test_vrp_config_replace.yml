@@ -1,0 +1,14 @@
+- name: Replace interface block but keep one line
+  hosts: huawei_switch
+  gather_facts: no
+  connection: ansible.netcommon.network_cli
+  tasks:
+    - name: Replace MultiGE1/0/10 block, keep description
+      blumleon.vrp.vrp_config:
+        parents: interface MultiGE1/0/10
+        lines:
+          - shutdown
+        state: replace
+        keep_lines:
+          - description KEEP_ME
+        save_when: changed

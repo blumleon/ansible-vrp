@@ -1,0 +1,10 @@
+- name: Create VLAN 100
+  hosts: huawei_switch
+  gather_facts: no
+  connection: ansible.netcommon.network_cli
+  tasks:
+    - name: Add VLAN
+      blumleon.vrp.vrp_vlan:
+        vlan_id: 100
+        name: "TEST_VLAN"
+        save_when: changed

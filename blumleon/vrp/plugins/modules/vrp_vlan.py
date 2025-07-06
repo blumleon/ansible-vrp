@@ -86,40 +86,65 @@ from ansible.module_utils.connection import Connection
 from ansible_collections.blumleon.vrp.plugins.module_utils import vrp_common as vc
 
 
-def main():
-    spec = dict(
+def _build_body(vlan_id: int, name: str | None) -> list[str]:
+    """
+    Return the *child* lines for a VLAN context.
+    Only the name is configurable so far.
+    """
+    return [f"name {name}"] if name else []
+
+
+def main() -> None:
+    arg_spec = dict(
         vlan_id=dict(type="int", required=True, aliases=["id"]),
         name=dict(type="str"),
         state=dict(type="str", choices=["present", "absent"], default="present"),
         save_when=dict(
-            type="str", choices=["never", "changed", "always"], default="changed"
+            type="str",
+            choices=["never", "changed", "always"],
+            default="changed",
         ),
     )
-    module = AnsibleModule(argument_spec=spec, supports_check_mode=True)
+    module = AnsibleModule(argument_spec=arg_spec, supports_check_mode=True)
     p = module.params
-    conn = Connection(module._socket_path)
+    conn: Connection = Connection(module._socket_path)
 
-    parents = f"vlan {p['vlan_id']}"
+    vlan_parent = f"vlan {p['vlan_id']}"
+    body_lines = _build_body(p["vlan_id"], p.get("name"))
 
+    # state=absent
     if p["state"] == "absent":
-        body = []
-        cli = [f"undo vlan {p['vlan_id']}"]
-    else:
-        body = [f"name {p['name']}"] if p.get("name") else []
-        running = vc.load_running_config(conn)
-        body = vc.diff_line_match(running, [parents], body, state="replace", keep=[])
-        cli = ["system-view", parents] + body + ["return", "return"]
+        running_cfg = vc.load_running_config(conn)
+        vlan_exists = vlan_parent in running_cfg
 
-    changed = bool(body) or p["state"] == "absent"
+        if not vlan_exists:
+            module.exit_json(changed=False, commands=[], responses=[])
 
-    if changed:
-        vc.append_save(cli, p["save_when"])
+        # build the command list manually (undo vlan must be issued globally)
+        commands = ["system-view", f"undo vlan {p['vlan_id']}", "return"]
+        vc.append_save(commands, p["save_when"], changed=True)
+
+        if module.check_mode:
+            module.exit_json(changed=True, commands=commands)
+
+        responses = conn.run_commands(commands)
+        module.exit_json(changed=True, commands=commands, responses=responses)
+
+    # state=present
+    changed, commands = vc.diff_and_wrap(
+        conn,
+        parents=[vlan_parent],
+        cand_children=body_lines,
+        save_when=p["save_when"],
+        state="replace",
+        keep=[],
+    )
 
     if module.check_mode:
-        module.exit_json(changed=changed, commands=cli)
+        module.exit_json(changed=changed, commands=commands)
 
-    responses = conn.run_commands(cli) if changed else []
-    module.exit_json(changed=changed, commands=cli, responses=responses)
+    responses = conn.run_commands(commands) if changed else []
+    module.exit_json(changed=changed, commands=commands, responses=responses)
 
 
 if __name__ == "__main__":

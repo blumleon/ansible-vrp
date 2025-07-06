@@ -1,0 +1,10 @@
+- name: Reset Interface MultiGE1/0/12 to factory defaults
+  hosts: huawei_switch
+  gather_facts: no
+  connection: ansible.netcommon.network_cli
+  tasks:
+    - name: Remove all custom config from the interface
+      blumleon.vrp.vrp_interface:
+        name: MultiGE1/0/12
+        state: absent
+        save_when: always

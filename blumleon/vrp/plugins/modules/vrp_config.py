@@ -127,7 +127,6 @@ backup_path:
   type: str
   returned: when backup was used
 """
-
 from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils.connection import Connection
 from ansible_collections.blumleon.vrp.plugins.module_utils import vrp_common as vc
@@ -179,7 +178,7 @@ def main() -> None:
         cli_cmds = (
             ["system-view"] + parents + body_cmds + ["return"] * (len(parents) + 1)
         )
-        vc.append_save(cli_cmds, p["save_when"], changed=True)  # ← neues Flag
+        vc.append_save(cli_cmds, p["save_when"], changed=True)
         responses = conn.run_commands(cli_cmds)
 
     module.exit_json(

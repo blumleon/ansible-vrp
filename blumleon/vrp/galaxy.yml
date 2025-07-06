@@ -7,6 +7,13 @@ authors:
 description: Ansible Collection for CLI-based automation of Huawei VRP network devices.
 license:
   - GPL-3.0-or-later
+build_ignore:
+  - tests
+  - '*.tar.gz'
+  - .ruff_cache/
+  - .pytest_cache/
+  - pyproject.toml
+  - .gitignore
 tags:
   - network
   - huawei

@@ -1,0 +1,8 @@
+- name: Backup current running config
+  hosts: huawei_switch
+  gather_facts: no
+  connection: ansible.netcommon.network_cli
+  tasks:
+    - name: Save config to custom path
+      blumleon.vrp.vrp_backup:
+        backup_path: /tmp/vrp_config_backup.cfg

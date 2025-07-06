@@ -1,0 +1,7 @@
+- name: Trigger local backup to default backups/ dir
+  hosts: huawei_switch
+  gather_facts: no
+  connection: ansible.netcommon.network_cli
+  tasks:
+    - name: Run backup without custom path
+      blumleon.vrp.vrp_backup: {}

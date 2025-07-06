@@ -10,8 +10,9 @@
 """Terminal plugin for Huawei VRP devices – ensures prompt recognition and disables paging."""
 
 import re
-from ansible.plugins.terminal import TerminalBase
+
 from ansible.errors import AnsibleConnectionFailure
+from ansible.plugins.terminal import TerminalBase
 
 
 class TerminalModule(TerminalBase):
