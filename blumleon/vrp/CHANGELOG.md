@@ -2,6 +2,10 @@
 
 All notable changes to this collection will be documented in this file.
 
+## [1.1.3] – 2025-07-07
+### Fixed
+- README: correct tests link
+
 ## [1.1.2] – 2025-07-07
 ### Fixed
 - README: license badge now shows GPL-3.0

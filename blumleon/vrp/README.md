@@ -84,7 +84,7 @@ See `ansible-doc blumleon.vrp.<plugin>` for complete options.
 
 Example playbooks for local testing are provided in the `tests/` folder.
 *(they require access to a lab VRP switch).*
-https://github.com/blumleon/ansible-vrp/tree/main/tests
+https://github.com/blumleon/ansible-vrp/tree/master/blumleon/vrp/tests
 
 ## Contributing
 
