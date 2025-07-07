@@ -11,7 +11,7 @@ DOCUMENTATION = r"""
 ---
 name: vrp
 short_description: CLI connection plugin for Huawei VRP-based devices
-version_added: "1.0.0"
+version_added: "2.14.0"
 author: Leon Blum (@blumleon)
 description:
   - Provides a CLI abstraction for Huawei switches running
@@ -24,7 +24,7 @@ notes:
     C(ansible_network_os=blumleon.vrp.vrp) and
     C(ansible_connection=ansible.netcommon.network_cli) are set.
 seealso:
-  - module: vrp_command
+  - module: blumleon.vrp.vrp_command
 """
 import json
 import re

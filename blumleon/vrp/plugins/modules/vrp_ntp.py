@@ -11,7 +11,7 @@ DOCUMENTATION = r"""
 ---
 module: vrp_ntp
 short_description: Configure NTP server, timezone, and daylight saving time on Huawei VRP
-version_added: "1.0.0"
+version_added: "2.14.0"
 author: Leon Blum (@blumleon)
 description:
   - Configures an NTP unicast server, timezone settings, and daylight saving time on Huawei VRP devices.
@@ -28,7 +28,6 @@ options:
     description:
       - Optional source interface for outbound NTP packets.
     type: str
-    required: false
 
   timezone_name:
     description:
@@ -51,14 +50,14 @@ options:
   dst_start:
     description:
       - Start time of DST in the format C(HH:MM YYYY-MM-DD).
+      - If omitted, no daylight-saving-time configuration is applied.
     type: str
-    default: "02:00 2025-03-30"
 
   dst_end:
     description:
       - End time of DST in the format C(HH:MM YYYY-MM-DD).
+      - Must be provided together with C(dst_start).
     type: str
-    default: "03:00 2025-10-26"
 
   dst_offset:
     description:
@@ -102,7 +101,6 @@ options:
     description:
       - Optional path on the controller to store the backup file.
     type: str
-    required: false
 
 notes:
   - Requires C(ansible_connection=ansible.netcommon.network_cli).
@@ -110,21 +108,15 @@ notes:
   - This is not a full-featured time service configuration tool. It is meant for basic NTP/DST setup.
 
 seealso:
-  - module: vrp_config
-  - module: vrp_backup
+  - module: blumleon.vrp.vrp_config
+  - module: blumleon.vrp.vrp_backup
 """
 
 EXAMPLES = r"""
-- name: Configure NTP with default timezone
+- name: Configure NTP with default timezone (no DST)
   blumleon.vrp.vrp_ntp:
-    server: <ntp-server-address>
+    server: ntp.example.net
     save_when: changed
-
-- name: Disable all NTP settings and remove configuration
-  blumleon.vrp.vrp_ntp:
-    server: <ntp-server-address>
-    state: absent
-    save_when: always
 
 - name: Configure custom DST and timezone with source interface
   blumleon.vrp.vrp_ntp:
@@ -133,8 +125,8 @@ EXAMPLES = r"""
     timezone_name: UTC
     timezone_offset: 0
     dst_name: MyDST
-    dst_start: "01:00 2025-04-01"
-    dst_end: "01:00 2025-10-01"
+    dst_start: "01:00 2026-03-29"
+    dst_end:   "01:00 2026-10-25"
     dst_offset: "01:00"
     save_when: changed
 """
@@ -168,32 +160,40 @@ from ansible_collections.blumleon.vrp.plugins.module_utils import vrp_common as 
 
 
 def _build_desired_lines(p: dict) -> list[str]:
+    """Compose the list of desired CLI lines based on provided parameters."""
     lines = [
         f"clock timezone {p['timezone_name']} add {p['timezone_offset']}",
-        (
-            f"clock daylight-saving-time {p['dst_name']} one-year "
-            f"{p['dst_start']} {p['dst_end']} {p['dst_offset']}"
-        ),
         f"ntp unicast-server {p['server']}",
     ]
+
+    # DST only if both start & end are provided
+    if p.get("dst_start") and p.get("dst_end"):
+        lines.append(
+            f"clock daylight-saving-time {p['dst_name']} one-year "
+            f"{p['dst_start']} {p['dst_end']} {p['dst_offset']}"
+        )
+
     if p["disable_ipv4_server"]:
         lines.append("ntp server disable")
     if p["disable_ipv6_server"]:
         lines.append("ntp ipv6 server disable")
     if p.get("source_interface"):
         lines.append(f"ntp server source-interface {p['source_interface']}")
+
     return lines
 
 
 def main() -> None:
     arg_spec = dict(
+        # required
         server=dict(type="str", required=True),
+        # optional
         source_interface=dict(type="str"),
         timezone_name=dict(type="str", default="CET"),
         timezone_offset=dict(type="int", default=1),
         dst_name=dict(type="str", default="DST"),
-        dst_start=dict(type="str", default="02:00 2025-03-30"),
-        dst_end=dict(type="str", default="03:00 2025-10-26"),
+        dst_start=dict(type="str"),
+        dst_end=dict(type="str"),
         dst_offset=dict(type="str", default="01:00"),
         disable_ipv4_server=dict(type="bool", default=True),
         disable_ipv6_server=dict(type="bool", default=True),
@@ -209,15 +209,17 @@ def main() -> None:
     p = module.params
     conn = Connection(module._socket_path)
 
+    # optional backup
     backup_changed, backup_path = vc.backup_config(
         conn, p["backup"], p.get("backup_path"), prefix="vrp_ntp_"
     )
 
+    # desired body
     desired_lines = _build_desired_lines(p)
     desired_state = "absent" if p["state"] == "absent" else "present"
 
-    # Diff & Wrapper
-    changed_cfg, cli_cmds = vc.diff_and_wrap(
+    # diff & wrap
+    cfg_changed, cli_cmds = vc.diff_and_wrap(
         conn,
         parents=[],
         cand_children=desired_lines,
@@ -227,12 +229,14 @@ def main() -> None:
         keep=[],
     )
 
-    changed = changed_cfg or backup_changed
+    changed = cfg_changed or backup_changed
 
+    # check-mode
     if module.check_mode:
         module.exit_json(changed=changed, commands=cli_cmds, backup_path=backup_path)
 
-    responses = conn.run_commands(cli_cmds) if changed_cfg else []
+    # execute
+    responses = conn.run_commands(cli_cmds) if cfg_changed else []
     module.exit_json(
         changed=changed,
         commands=cli_cmds,

@@ -11,7 +11,7 @@ DOCUMENTATION = r"""
 ---
 module: vrp_interface
 short_description: Configures Huawei VRP interfaces (L1 & L2) idempotently
-version_added: "1.0.0"
+version_added: "2.14.0"
 author:
   - Leon Blum (@blumleon)
 description:
@@ -79,7 +79,7 @@ options:
     choices: [never, changed, always]
 notes:
   - Recommended for switchports – not suitable for loopbacks or management interfaces.
-  - C(trunk_vlans) is passed as a list like C("10,20-25") and automatically formatted.
+  - C(trunk_vlans) is passed as a string like C("10,20-25") and automatically formatted.
   - C(vlan) may only be set on access ports, C(native_vlan) only on trunk ports.
   - The module automatically detects if e.g. C(undo shutdown) is implicitly active.
 """

@@ -26,7 +26,7 @@ def _sha1(text: str) -> str:
 
 
 def _last_backup(dir_: Path, prefix: str) -> Path | None:
-    """Liefert die jüngste Backup-Datei mit passendem Präfix zurück."""
+    """Returns the most recent backup file with a matching prefix."""
     files = sorted(
         (f for f in dir_.iterdir() if f.is_file() and f.name.startswith(prefix)),
         key=lambda p: p.stat().st_mtime,
@@ -42,15 +42,15 @@ def backup_config(
     prefix: str = "vrp_",
 ) -> tuple[bool, str | None]:
     """
-    Holt die Running-Config und speichert sie lokal.
-    Liefert (changed, path) zurück.
+    Retrieves the running config and saves it locally.
+    Returns (changed, path).
     """
     if not do_backup:
         return False, None
 
     cfg_text = "\n".join(load_running_config(conn))
 
-    # ── A) Benutzerdefinierter Pfad ────────────────────────────────
+    # A) User-defined path
     if user_path:
         dst = Path(user_path)
         dst.parent.mkdir(parents=True, exist_ok=True)
@@ -59,16 +59,15 @@ def backup_config(
             dst.write_text(cfg_text)
         return (not identical), str(dst)
 
-    # ── B) Automatischer Pfad im Verzeichnis ./backups ─────────────
+    # B) Automatic path in the ./backups directory
     bdir = Path("backups")
     bdir.mkdir(exist_ok=True)
 
     last = _last_backup(bdir, prefix)
     if last and _sha1(last.read_text()) == _sha1(cfg_text):
-        # identisch → kein neues File
         return False, str(last)
 
-    ts = datetime.now().strftime("%Y%m%d-%H%M%S")  # Local TZ (Europe/Zurich)
+    ts = datetime.now().strftime("%Y%m%d-%H%M%S")
     new_path = bdir / f"{prefix}{ts}.cfg"
     new_path.write_text(cfg_text)
     return True, str(new_path)
@@ -113,7 +112,7 @@ def find_parent_block(running: list[str], parents: list[str]):
 
 # Helper to create appropriate "undo …" command  (extended)
 def _undo_cmd(line: str) -> str:
-    """Translate an *existing* config line into the matching VRP `undo …."""
+    """Translate an *existing* config line into the matching VRP `undo...`"""
     tokens = line.split()
     if not tokens:
         return ""

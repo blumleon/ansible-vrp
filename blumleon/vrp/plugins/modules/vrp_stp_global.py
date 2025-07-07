@@ -11,7 +11,7 @@ DOCUMENTATION = r"""
 ---
 module: vrp_stp_global
 short_description: Configure global STP protection on Huawei VRP
-version_added: "1.0.0"
+version_added: "2.14.0"
 author: Leon Blum (@blumleon)
 description:
   - Enables or disables global Spanning Tree protection features such as BPDU protection.

@@ -11,7 +11,7 @@ DOCUMENTATION = r"""
 ---
 module: vrp_system
 short_description: Configure system-level settings on Huawei VRP devices
-version_added: "1.0.0"
+version_added: "2.14.0"
 author: Leon Blum (@blumleon)
 description:
   - Configures IPv4/IPv6 DNS name servers and domain name on Huawei VRP.

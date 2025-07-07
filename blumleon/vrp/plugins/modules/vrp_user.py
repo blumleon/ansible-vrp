@@ -11,7 +11,7 @@ DOCUMENTATION = r"""
 ---
 module: vrp_user
 short_description: Manage local AAA users and SSH key access on Huawei VRP devices
-version_added: "1.0.0"
+version_added: "2.14.0"
 author: Leon Blum (@blumleon)
 description:
   - Creates or removes local users on Huawei VRP platforms under the C(aaa) configuration hierarchy.
@@ -73,8 +73,8 @@ notes:
   - Password-based and SSH key-based users are mutually exclusive (password is ignored if key is present).
 
 seealso:
-  - module: vrp_config
-  - module: vrp_backup
+  - module: blumleon.vrp.vrp_config
+  - module: blumleon.vrp.vrp_backup
 """
 
 EXAMPLES = r"""

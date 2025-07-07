@@ -11,7 +11,7 @@ DOCUMENTATION = r"""
 ---
 module: vrp_vlan
 short_description: Manage VLANs on Huawei VRP devices
-version_added: "1.0.0"
+version_added: "2.14.0"
 author: Leon Blum (@blumleon)
 description:
   - Creates or deletes VLANs on Huawei VRP-based devices.
@@ -50,8 +50,8 @@ notes:
   - For state C(absent), the VLAN is removed via C(undo vlan <id>) without entering the config block.
 
 seealso:
-  - module: vrp_interface
-  - module: vrp_config
+  - module: blumleon.vrp.vrp_interface
+  - module: blumleon.vrp.vrp_config
 """
 
 EXAMPLES = r"""

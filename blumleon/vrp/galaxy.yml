@@ -9,9 +9,10 @@ license:
   - GPL-3.0-or-later
 build_ignore:
   - tests
+  - dist
   - '*.tar.gz'
-  - .ruff_cache/
-  - .pytest_cache/
+  - .ruff_cache
+  - .pytest_cache
   - pyproject.toml
   - .gitignore
 tags:

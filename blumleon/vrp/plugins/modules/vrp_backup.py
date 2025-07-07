@@ -11,7 +11,7 @@ DOCUMENTATION = r"""
 ---
 module: vrp_backup
 short_description: Saves the running configuration of Huawei VRP devices
-version_added: "1.0.0"
+version_added: "2.14.0"
 author: Leon Blum (@blumleon)
 description:
   - Retrieves the current running configuration from a Huawei VRP device and saves it locally on the Ansible controller.
@@ -30,8 +30,8 @@ notes:
   - Paging is automatically disabled through the VRP terminal plugin.
 
 seealso:
-  - module: vrp_command
-  - module: vrp_config
+  - module: blumleon.vrp.vrp_command
+  - module: blumleon.vrp.vrp_config
 """
 
 EXAMPLES = r"""

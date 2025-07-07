@@ -25,7 +25,7 @@ class TerminalModule(TerminalBase):
     # Error messages usually begin with "Error:"
     terminal_stderr_re = [re.compile(br"(?:\r\n)?Error:")]
 
-    # (Optional) strip of ANSI sequences
+    # (Optional) strip ANSI escape sequences
     ansi_re = [re.compile(br"\x1b\[[0-9;]*[A-Za-z]")]
 
     def on_open_shell(self) -> None:

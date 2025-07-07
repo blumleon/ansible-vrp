@@ -24,14 +24,14 @@
 
 - Clean CLI abstraction via `network_cli`
 - Native modules for VLAN, Interface, NTP, User, DNS, Config Backup
-- Idempotent logic & check-mode support  (except `vrp_user` module)
+- Idempotent logic & check-mode support  (except `vrp_user`: check-mode supported, idempotency limited)
 - Built-in `cliconf` and `terminal` plugin
 
 ## Supported Platforms & Requirements
 
-| Category             | Version / Notes                                                                 |
+| Category             | Version / Notes                                                                  |
 |----------------------|----------------------------------------------------------------------------------|
-| **Ansible**          | 2.10+ (tested with 2.17.9)                                                       |
+| **Ansible**          | 2.14+ or newer (tested with 2.17.9)                                              |
 | **Python**           | 3.8+ (tested with 3.10.12)                                                       |
 | **VRP OS**           | Tested on VRP V600R022SPH121 (YunShan OS 1.22.0.1) – CloudEngine S5732-H-V2      |
 | **Collection deps**  | `ansible.netcommon >= 2.5.0` (tested with 6.1.3)                                 |
@@ -76,12 +76,14 @@ ansible-galaxy collection install blumleon-vrp-*.tar.gz
 | module   | `vrp_system`   | DNS name-servers & domain name                 |
 | module   | `vrp_user`     | Local AAA user & SSH-key handling              |
 | module   | `vrp_backup`   | Pull running-config to controller              |
+| module   | vrp_stp_global | Global STP BPDU-protection                            |
 
 See `ansible-doc blumleon.vrp.<plugin>` for complete options.
 
 ## Examples
 
 Example playbooks for local testing are provided in the `tests/` folder.
+*(they require access to a lab VRP switch).*
 https://github.com/blumleon/ansible-vrp/tree/main/tests
 
 ## Contributing

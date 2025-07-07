@@ -16,6 +16,7 @@ parts/
 sdist/
 var/
 wheels/
+*.tar.gz 
 
 # OS-specific junk
 .DS_Store
@@ -30,3 +31,11 @@ Thumbs.db
 # Python venv
 venv/
 .env/
+
+# Linter / Tests
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+tests/output/

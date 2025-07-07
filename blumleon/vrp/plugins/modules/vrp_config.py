@@ -11,7 +11,7 @@ DOCUMENTATION = r"""
 ---
 module: vrp_config
 short_description: Manage configuration lines on Huawei VRP devices
-version_added: "1.0.0"
+version_added: "2.14.0"
 author: Leon Blum (@blumleon)
 description:
   - Applies configuration changes to Huawei VRP devices in an idempotent way.
@@ -74,8 +74,8 @@ notes:
   - When C(state=replace) is used, existing lines in the context block are removed unless preserved via C(keep_lines).
 
 seealso:
-  - module: vrp_interface
-  - module: vrp_command
+  - module: blumleon.vrp.vrp_interface
+  - module: blumleon.vrp.vrp_command
 """
 
 EXAMPLES = r"""

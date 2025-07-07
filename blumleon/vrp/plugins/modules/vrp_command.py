@@ -11,7 +11,7 @@ DOCUMENTATION = r"""
 ---
 module: vrp_command
 short_description: Execute CLI commands on Huawei VRP devices
-version_added: "1.0.0"
+version_added: "2.14.0"
 author:
   - Leon Blum (@blumleon)
 description:
@@ -62,7 +62,7 @@ notes:
   - Automatic paging disablement is handled via the VRP terminal plugin.
 
 seealso:
-  - module: vrp_config
+  - module: blumleon.vrp.vrp_config
 """
 
 EXAMPLES = r"""
