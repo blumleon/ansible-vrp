@@ -76,7 +76,7 @@ ansible-galaxy collection install blumleon-vrp-*.tar.gz
 | module   | `vrp_system`   | DNS name-servers & domain name                 |
 | module   | `vrp_user`     | Local AAA user & SSH-key handling              |
 | module   | `vrp_backup`   | Pull running-config to controller              |
-| module   | vrp_stp_global | Global STP BPDU-protection                            |
+| module   | `vrp_stp_global` | Global STP BPDU-protection                   |
 
 See `ansible-doc blumleon.vrp.<plugin>` for complete options.
 
