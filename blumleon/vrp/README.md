@@ -1,6 +1,6 @@
 # blumleon.vrp – Ansible Collection for Huawei VRP Switches
 [![Ansible Galaxy](https://img.shields.io/badge/galaxy-blumleon.vrp-blue.svg)](https://galaxy.ansible.com/blumleon/vrp)
-[![license](https://img.shields.io/badge/license-GPLv2%2B-blue)](LICENSE)
+[![license](https://img.shields.io/badge/license-GPLv3-blue)](LICENSE)
 
 > Manage Huawei VRP devices idempotently and reliably using native Ansible modules.
 
