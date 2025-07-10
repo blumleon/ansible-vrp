@@ -143,11 +143,8 @@ def main() -> None:
     changed = cfg_changed or backup_changed
 
     if module.check_mode:
-        module.exit_json(
-            changed=changed,
-            commands=cli_cmds,
-            backup_path=backup_path,
-        )
+        vc.finish_module(module, changed=changed, cli_cmds=cli_cmds)
+        return
 
     responses = conn.run_commands(cli_cmds) if cfg_changed else []
 

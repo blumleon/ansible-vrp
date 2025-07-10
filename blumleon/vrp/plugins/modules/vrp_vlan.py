@@ -118,17 +118,24 @@ def main() -> None:
         vlan_exists = vlan_parent in running_cfg
 
         if not vlan_exists:
-            module.exit_json(changed=False, commands=[], responses=[])
+            vc.finish_module(module, changed=False, cli_cmds=[], responses=[])
+            return
 
         # build the command list manually (undo vlan must be issued globally)
         commands = ["system-view", f"undo vlan {p['vlan_id']}", "return"]
         vc.append_save(commands, p["save_when"], changed=True)
 
         if module.check_mode:
-            module.exit_json(changed=True, commands=commands)
+            vc.finish_module(
+                module,
+                changed=True,
+                cli_cmds=commands,
+            )
+            return
 
         responses = conn.run_commands(commands)
-        module.exit_json(changed=True, commands=commands, responses=responses)
+        vc.finish_module(module, changed=True, cli_cmds=commands, responses=responses)
+        return
 
     # state=present
     changed, commands = vc.diff_and_wrap(
@@ -141,10 +148,11 @@ def main() -> None:
     )
 
     if module.check_mode:
-        module.exit_json(changed=changed, commands=commands)
+        vc.finish_module(module, changed=changed, cli_cmds=commands)
+        return
 
     responses = conn.run_commands(commands) if changed else []
-    module.exit_json(changed=changed, commands=commands, responses=responses)
+    vc.finish_module(module, changed=changed, cli_cmds=commands, responses=responses)
 
 
 if __name__ == "__main__":

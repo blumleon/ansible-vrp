@@ -218,10 +218,11 @@ def main() -> None:
     )
 
     if module.check_mode:
-        module.exit_json(changed=changed, commands=cli_cmds)
+        vc.finish_module(module, changed=changed, cli_cmds=cli_cmds)
+        return
 
     responses = conn.run_commands(cli_cmds) if changed else []
-    module.exit_json(changed=changed, commands=cli_cmds, responses=responses)
+    vc.finish_module(module, changed=changed, cli_cmds=cli_cmds, responses=responses)
 
 
 if __name__ == "__main__":

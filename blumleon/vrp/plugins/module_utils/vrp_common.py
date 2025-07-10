@@ -395,3 +395,20 @@ def wrap_cmd(cmd, user=None, priv_cmd=None):
         if key in cmd:
             return {"command": cmd, "prompt": regex, "answer": "Y"}
     return cmd
+
+
+def finish_module(module, *, changed, cli_cmds, responses=None):
+    """
+    Uniform return wrapper.
+    - Assembles the result dict
+    - Appends diff[“prepared”] if --diff is active
+    - Calls module.exit_json()
+    """
+    result = dict(changed=changed, commands=cli_cmds)
+
+    if module._diff and cli_cmds:
+        result["diff"] = {"prepared": "\n".join(f"+ {c}" for c in cli_cmds)}
+
+    if responses is not None:
+        result["responses"] = responses
+    module.exit_json(**result)

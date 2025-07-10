@@ -127,6 +127,7 @@ backup_path:
   type: str
   returned: when backup was used
 """
+
 from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils.connection import Connection
 from ansible_collections.blumleon.vrp.plugins.module_utils import vrp_common as vc
@@ -170,9 +171,12 @@ def main() -> None:
 
     changed = changed_config or backup_changed
 
+    # Check-Mode: Diff via finish_module
     if module.check_mode:
-        module.exit_json(changed=changed, commands=body_cmds, backup_path=backup_path)
+        vc.finish_module(module, changed=changed, cli_cmds=body_cmds)
+        return
 
+    # Live-Run
     cli_cmds, responses = [], []
     if changed_config:
         cli_cmds = (
@@ -182,7 +186,10 @@ def main() -> None:
         responses = conn.run_commands(cli_cmds)
 
     module.exit_json(
-        changed=changed, commands=cli_cmds, responses=responses, backup_path=backup_path
+        changed=changed,
+        commands=cli_cmds,
+        responses=responses,
+        backup_path=backup_path,
     )
 
 

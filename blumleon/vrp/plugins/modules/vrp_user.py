@@ -249,10 +249,11 @@ def main() -> None:
         changed |= c1 or c2
 
     if module.check_mode:
-        module.exit_json(changed=changed, commands=cli)
+        vc.finish_module(module, changed=changed, cli_cmds=cli)
+        return
 
-    resp = _safe_run(conn, cli, module) if changed else []
-    module.exit_json(changed=changed, commands=cli, responses=resp)
+    responses = _safe_run(conn, cli, module) if changed else []
+    module.exit_json(changed=changed, commands=cli, responses=responses)
 
 
 if __name__ == "__main__":

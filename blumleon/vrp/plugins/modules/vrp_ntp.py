@@ -45,7 +45,6 @@ options:
     description:
       - Name used for daylight saving time.
     type: str
-    default: DST
 
   dst_start:
     description:
@@ -63,7 +62,12 @@ options:
     description:
       - Time offset applied during DST (e.g., C(01:00)).
     type: str
-    default: "01:00"
+
+  manage_timezone:
+    description:
+      - Whether to configure timezone and daylight-saving settings.
+      - If omitted, timezone is configured only when C(state=present) and relevant parameters are provided.
+    type: bool
 
   disable_ipv4_server:
     description:
@@ -154,6 +158,7 @@ backup_path:
   type: str
   returned: when backup was requested
 """
+
 from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils.connection import Connection
 from ansible_collections.blumleon.vrp.plugins.module_utils import vrp_common as vc
@@ -248,7 +253,8 @@ def main() -> None:
 
     # check-mode handling
     if module.check_mode:
-        module.exit_json(changed=changed, commands=cli_cmds, backup_path=backup_path)
+        vc.finish_module(module, changed=changed, cli_cmds=cli_cmds)
+        return
 
     # execute commands if needed
     responses = conn.run_commands(cli_cmds) if cfg_changed else []
