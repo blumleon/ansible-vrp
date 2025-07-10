@@ -2,6 +2,12 @@
 
 All notable changes to this collection will be documented in this file.
 
+## [1.1.4] – 2025-07-10
+### Fixed
+- `vrp_ntp`: Fixed invalid `undo clock timezone` command when using `state: absent` (no more syntax error).
+- `vrp_ntp`: DST configuration is now only applied when all `dst_*` parameters are explicitly set.
+- `vrp_common.diff_and_wrap`: Added special handling for `undo clock timezone` to ensure correct command generation.
+
 ## [1.1.3] – 2025-07-07
 ### Fixed
 - README: correct tests link

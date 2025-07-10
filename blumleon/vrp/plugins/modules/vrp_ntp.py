@@ -160,18 +160,27 @@ from ansible_collections.blumleon.vrp.plugins.module_utils import vrp_common as 
 
 
 def _build_desired_lines(p: dict) -> list[str]:
-    """Compose the list of desired CLI lines based on provided parameters."""
-    lines = [
-        f"clock timezone {p['timezone_name']} add {p['timezone_offset']}",
-        f"ntp unicast-server {p['server']}",
-    ]
+    """Return a list of CLI lines that should be present or absent."""
+    lines: list[str] = []
 
-    # DST only if both start & end are provided
-    if p.get("dst_start") and p.get("dst_end"):
-        lines.append(
-            f"clock daylight-saving-time {p['dst_name']} one-year "
-            f"{p['dst_start']} {p['dst_end']} {p['dst_offset']}"
-        )
+    # Manage timezone/DST only when explicitly requested
+    if p["manage_timezone"]:
+        lines.append(f"clock timezone {p['timezone_name']} add {p['timezone_offset']}")
+
+        # Add daylight-saving configuration only if both dates are provided
+        if (
+            p.get("dst_start")
+            and p.get("dst_end")
+            and p.get("dst_name")
+            and p.get("dst_offset")
+        ):
+            lines.append(
+                f"clock daylight-saving-time {p['dst_name']} one-year "
+                f"{p['dst_start']} {p['dst_end']} {p['dst_offset']}"
+            )
+
+    # NTP server is always considered
+    lines.append(f"ntp unicast-server {p['server']}")
 
     if p["disable_ipv4_server"]:
         lines.append("ntp server disable")
@@ -191,12 +200,13 @@ def main() -> None:
         source_interface=dict(type="str"),
         timezone_name=dict(type="str", default="CET"),
         timezone_offset=dict(type="int", default=1),
-        dst_name=dict(type="str", default="DST"),
+        dst_name=dict(type="str"),
         dst_start=dict(type="str"),
         dst_end=dict(type="str"),
-        dst_offset=dict(type="str", default="01:00"),
+        dst_offset=dict(type="str"),
         disable_ipv4_server=dict(type="bool", default=True),
         disable_ipv6_server=dict(type="bool", default=True),
+        manage_timezone=dict(type="bool"),
         state=dict(type="str", choices=["present", "absent"], default="present"),
         save_when=dict(
             type="str", choices=["never", "changed", "always"], default="changed"
@@ -207,6 +217,11 @@ def main() -> None:
 
     module = AnsibleModule(argument_spec=arg_spec, supports_check_mode=True)
     p = module.params
+
+    # Default behavior: manage timezone for present, skip for absent
+    if p["manage_timezone"] is None:
+        p["manage_timezone"] = p["state"] == "present"
+
     conn = Connection(module._socket_path)
 
     # optional backup
@@ -214,11 +229,11 @@ def main() -> None:
         conn, p["backup"], p.get("backup_path"), prefix="vrp_ntp_"
     )
 
-    # desired body
+    # desired configuration
     desired_lines = _build_desired_lines(p)
     desired_state = "absent" if p["state"] == "absent" else "present"
 
-    # diff & wrap
+    # generate CLI commands
     cfg_changed, cli_cmds = vc.diff_and_wrap(
         conn,
         parents=[],
@@ -231,11 +246,11 @@ def main() -> None:
 
     changed = cfg_changed or backup_changed
 
-    # check-mode
+    # check-mode handling
     if module.check_mode:
         module.exit_json(changed=changed, commands=cli_cmds, backup_path=backup_path)
 
-    # execute
+    # execute commands if needed
     responses = conn.run_commands(cli_cmds) if cfg_changed else []
     module.exit_json(
         changed=changed,

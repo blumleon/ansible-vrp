@@ -139,7 +139,7 @@ def _undo_cmd(line: str) -> str:
         return f"undo dns server {tokens[2]}"
 
     if tokens[:2] == ["clock", "timezone"]:
-        return f"undo clock timezone {tokens[2]}"
+        return "undo clock timezone"
     if tokens[:2] == ["clock", "daylight-saving-time"]:
         return "undo clock daylight-saving-time"
 
