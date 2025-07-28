@@ -72,6 +72,8 @@ notes:
   - Requires C(ansible_connection=ansible.netcommon.network_cli).
   - Automatically enters and exits system-view mode if configuration changes are needed.
   - When C(state=replace) is used, existing lines in the context block are removed unless preserved via C(keep_lines).
+  - Special handling is implemented for C(arp anti-attack check user-bind enable), which is correctly undone when using C(state: absent).
+
 
 seealso:
   - module: blumleon.vrp.vrp_interface
