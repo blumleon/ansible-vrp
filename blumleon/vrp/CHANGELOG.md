@@ -2,6 +2,10 @@
 
 All notable changes to this collection will be documented in this file.
 
+## [1.1.6] – 2025-07.28
+### Fixed
+- `vrp_config`: Added custom undo logic for `arp anti-attack check user-bind enable`
+
 ## [1.1.5] – 2025-07-10
 ### Fixed
 - `vrp_vlan`, `vrp_ntp`, `vrp_stp_global`, `vrp_system`, `vrp_config`, `vrp_user`: Added `--diff` support with consistent use of `diff_and_wrap()` and `check_mode` handling.
