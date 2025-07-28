@@ -117,6 +117,10 @@ def _undo_cmd(line: str) -> str:
     if not tokens:
         return ""
 
+    # Special case: interface ARP anti-attack
+    if tokens[:5] == ["arp", "anti-attack", "check", "user-bind", "enable"]:
+        return "undo arp anti-attack check user-bind enable"
+
     # Interface specific lines
     if tokens[0] == "port":
         if tokens[1:3] == ["link-type", tokens[-1]]:
@@ -401,7 +405,7 @@ def finish_module(module, *, changed, cli_cmds, responses=None):
     """
     Uniform return wrapper.
     - Assembles the result dict
-    - Appends diff[“prepared”] if --diff is active
+    - Appends diff["prepared"] if --diff is active
     - Calls module.exit_json()
     """
     result = dict(changed=changed, commands=cli_cmds)
