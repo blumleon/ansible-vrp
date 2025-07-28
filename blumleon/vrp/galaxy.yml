@@ -1,6 +1,6 @@
 namespace: blumleon
 name: vrp
-version: 1.1.5
+version: 1.1.6
 readme: README.md
 authors:
   - Leon Blum <blumleon@users.noreply.github.com>
