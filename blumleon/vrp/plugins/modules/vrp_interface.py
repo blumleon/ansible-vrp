@@ -54,6 +54,7 @@ options:
   trunk_vlans:
     description:
       - VLAN list for trunk or hybrid ports, e.g. C(10,20-30)
+      - The keyword C(all) is supported and expands to C(2 to 4094)
     type: str
   native_vlan:
     description:
@@ -117,6 +118,14 @@ EXAMPLES = r"""
   blumleon.vrp.vrp_interface:
     name: MultiGE1/0/31
     state: absent
+
+- name: Trunk port with all VLANs
+  blumleon.vrp.vrp_interface:
+    name: MultiGE1/0/10
+    port_mode: trunk
+    trunk_vlans: "all"
+    native_vlan: 2
+    admin_state: up
 """
 
 RETURN = r"""
