@@ -131,6 +131,14 @@ def _undo_cmd(line: str) -> str:
             return ""  # auto removed by VRP
         if tokens[1:4] == ["trunk", "pvid", "vlan"]:
             return ""  # auto removed by VRP
+
+        if tokens[1:4] == ["hybrid", "untagged", "vlan"] and len(tokens) >= 5:
+            return f"undo port hybrid untagged vlan {' '.join(tokens[4:])}"
+        if tokens[1:4] == ["hybrid", "pvid", "vlan"] and len(tokens) >= 5:
+            return f"undo port hybrid pvid vlan {' '.join(tokens[4:])}"
+        if tokens[1:4] == ["hybrid", "tagged", "vlan"] and len(tokens) >= 5:
+            return f"undo port hybrid tagged vlan {' '.join(tokens[4:])}"
+
         return f"undo {' '.join(tokens[:-1])}"
 
     # Global config lines
@@ -195,6 +203,9 @@ def _norm(s: str) -> str:
 
     if low.startswith("port trunk allow-pass vlan "):
         prefix, vlans = low.split("vlan ", 1)
+        if vlans.strip() == "all":
+            vlans = "2 to 4094"
+        vlans = vlans.replace(" to ", "-")    
         ordered = " ".join(sorted(vlans.split(), key=lambda x: int(x.split("-")[0])))
         return f"{prefix}vlan {ordered}"
 
@@ -317,10 +328,13 @@ def _l1_lines(p):
         ls.append(f"mtu {p['mtu']}")
     return ls
 
-
 def _normalize_vlan_list(raw: str) -> str:
+    raw = raw.strip().lower()
+    if raw == "all":
+        return "all"
+
     parts: list[str] = []
-    for tok in re.split(r"[,\s]+", raw.strip()):
+    for tok in re.split(r"[,\s]+", raw):
         if not tok:
             continue
         if "-" in tok:
@@ -329,7 +343,6 @@ def _normalize_vlan_list(raw: str) -> str:
         else:
             parts.append(tok)
     return " ".join(parts)
-
 
 def _l2_lines(p):
     ls: list[str] = []
