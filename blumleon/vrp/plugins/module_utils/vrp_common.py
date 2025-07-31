@@ -205,7 +205,7 @@ def _norm(s: str) -> str:
         prefix, vlans = low.split("vlan ", 1)
         if vlans.strip() == "all":
             vlans = "2 to 4094"
-        vlans = vlans.replace(" to ", "-")    
+        vlans = vlans.replace(" to ", "-")
         ordered = " ".join(sorted(vlans.split(), key=lambda x: int(x.split("-")[0])))
         return f"{prefix}vlan {ordered}"
 
@@ -328,6 +328,7 @@ def _l1_lines(p):
         ls.append(f"mtu {p['mtu']}")
     return ls
 
+
 def _normalize_vlan_list(raw: str) -> str:
     raw = raw.strip().lower()
     if raw == "all":
@@ -343,6 +344,7 @@ def _normalize_vlan_list(raw: str) -> str:
         else:
             parts.append(tok)
     return " ".join(parts)
+
 
 def _l2_lines(p):
     ls: list[str] = []
