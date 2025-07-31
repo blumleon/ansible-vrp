@@ -2,6 +2,13 @@
 
 All notable changes to this collection will be documented in this file.
 
+## [1.1.7] – 2025-07-29
+### Fixed
+- `vrp_interface`: Fixed a bug in `state: absent` for hybrid ports – incorrect or incomplete `undo port hybrid ... vlan` commands caused runtime errors.
+- ### Added
+- - `vrp_interface`: Added support for `trunk_vlans: "all"` (automatically normalized to `2 to 4094`, handled idempotently).
+- - Documentation updated to reflect support for trunk ports with all VLANs.
+-
 ## [1.1.6] – 2025-07.28
 ### Fixed
 - `vrp_config`: Added custom undo logic for `arp anti-attack check user-bind enable`
